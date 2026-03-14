@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -25,11 +25,12 @@ import org.apache.ibatis.reflection.factory.ObjectFactory;
 import org.apache.ibatis.reflection.property.PropertyTokenizer;
 
 /**
+ * 主要处理Map的属性读写
  * @author Clinton Begin
  */
 public class MapWrapper extends BaseWrapper {
 
-  private final Map<String, Object> map;
+  private final Map<String, Object> map; // 被包装的Map对象
 
   public MapWrapper(MetaObject metaObject, Map<String, Object> map) {
     super(metaObject);
@@ -39,9 +40,11 @@ public class MapWrapper extends BaseWrapper {
   @Override
   public Object get(PropertyTokenizer prop) {
     if (prop.getIndex() != null) {
+      // 如果是Collection类型就通过BaseWrapper中的方法处理
       Object collection = resolveCollection(prop, map);
       return getCollectionValue(prop, collection);
     } else {
+      // 根据Key从Map中获取对应的值
       return map.get(prop.getName());
     }
   }
@@ -49,9 +52,11 @@ public class MapWrapper extends BaseWrapper {
   @Override
   public void set(PropertyTokenizer prop, Object value) {
     if (prop.getIndex() != null) {
+      // 如果是Collection类型就通过BaseWrapper中的方法处理
       Object collection = resolveCollection(prop, map);
       setCollectionValue(prop, collection, value);
     } else {
+      // 根据Key从Map中设置对应的值
       map.put(prop.getName(), value);
     }
   }

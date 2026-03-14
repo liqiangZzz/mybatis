@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.session.SqlSession;
 
 /**
+ * Mapper注册器
+ *   在解析的过程中会将对应的Mapper添加到该注册器中。
  * @author Clinton Begin
  * @author Eduardo Macarron
  * @author Lasse Voss
@@ -46,12 +48,16 @@ public class MapperRegistry {
    * 获取Mapper接口对应的代理对象
    */
   public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
-    // 获取Mapper接口对应的 MapperProxyFactory 对象
+
+
+    // 1. 从 knownMappers 中获取Mapper接口对应的专属的代理工厂 MapperProxyFactory 对象
+    // 该工厂在解析 XML/接口注解阶段就已经被创建并存入 Map
     final MapperProxyFactory<T> mapperProxyFactory = (MapperProxyFactory<T>) knownMappers.get(type);
     if (mapperProxyFactory == null) {
       throw new BindingException("Type " + type + " is not known to the MapperRegistry.");
     }
     try {
+      // 2. 委派给工厂实例，传入当前的 sqlSession 开启代理对象的实例化
       return mapperProxyFactory.newInstance(sqlSession);
     } catch (Exception e) {
       throw new BindingException("Error getting mapper instance. Cause: " + e, e);
@@ -62,20 +68,28 @@ public class MapperRegistry {
     return knownMappers.containsKey(type);
   }
 
+
+  /**
+   * 将接口类型注册到 MapperRegistry，并准备其代理工厂。
+   */
   public <T> void addMapper(Class<T> type) {
-    if (type.isInterface()) { // 检测 type 是否为接口
-      if (hasMapper(type)) { // 检测是否已经加装过该接口
+    // 检测 type 是否为接口
+    if (type.isInterface()) {
+      // 检测是否已经加装过该接口
+      if (hasMapper(type)) {
         throw new BindingException("Type " + type + " is already known to the MapperRegistry.");
       }
       boolean loadCompleted = false;
       try {
-        // ！Map<Class<?>, MapperProxyFactory<?>> 存放的是接口类型，和对应的工厂类的关系
+
+        // 【核心产物】：为该接口创建一个专属的代理工厂 MapperProxyFactory
+        // 之后 sqlSession.getMapper(type) 实际上就是通过这个工厂创建 JDK 动态代理实例
         knownMappers.put(type, new MapperProxyFactory<>(type));
         // It's important that the type is added before the parser is run
         // otherwise the binding may automatically be attempted by the
         // mapper parser. If the type is already known, it won't try.
 
-        // 注册了接口之后，根据接口，开始解析所有方法上的注解，例如 @Select >>
+        // 【注解解析】：以接口为基准，解析其方法上标注的 SQL 注解（如 @Select, @Update）
         MapperAnnotationBuilder parser = new MapperAnnotationBuilder(config, type);
         parser.parse();
         loadCompleted = true;

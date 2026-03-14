@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -58,12 +58,25 @@ public class PreparedStatementHandler extends BaseStatementHandler {
     ps.addBatch();
   }
 
+
+  /**
+   * [JDBC 物理执行] 调用驱动程序执行 SQL，并触发结果集处理流程。
+   */
   @Override
   public <E> List<E> query(Statement statement, ResultHandler resultHandler) throws SQLException {
+
+    // 1. 类型强制转换：将通用的 Statement 转换为具备预编译能力的 PreparedStatement
+    // 如果放开日志 PreparedStatement 其实是一个 PreparedStatementLogger 的代理对象
     PreparedStatement ps = (PreparedStatement) statement;
-    // 到了JDBC的流程
+
+    // 2. 【物理执行阶段】：调用 JDBC 驱动执行 SQL。
+    // 此时控制权移交给 JDBC 驱动程序，执行数据库 IO 操作。
+    // 如果是代理对象的话 同样的会进入到 invoke 方法中
     ps.execute();
-    // 处理结果集
+
+    // 3. 【处理结果集】：委派给四大对象中的 ResultSetHandler。
+    // 负责将 JDBC 返回的原始数据流（ResultSet）解析并转化为 Java 结果对象（List/Map）。
+    // 若 ResultSetHandler 被插件包装，此处会先进入拦截器逻辑。
     return resultSetHandler.handleResultSets(ps);
   }
 
@@ -80,6 +93,7 @@ public class PreparedStatementHandler extends BaseStatementHandler {
     if (mappedStatement.getKeyGenerator() instanceof Jdbc3KeyGenerator) {
       String[] keyColumnNames = mappedStatement.getKeyColumns();
       if (keyColumnNames == null) {
+        // connection 是 日志的代理对象
         return connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
       } else {
         // 在执行 prepareStatement 方法的时候会进入进入到ConnectionLogger的invoker方法中

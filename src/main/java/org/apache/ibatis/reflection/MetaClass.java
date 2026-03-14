@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -48,6 +48,10 @@ public class MetaClass {
     return new MetaClass(type, reflectorFactory);
   }
 
+  /**
+   * 根据方法名称获取返回的类型 Person getPerson()
+   * metaClassForProperty("person") --》 Person
+   */
   public MetaClass metaClassForProperty(String name) {
     // orders  查找属性对应的 Class 类型
     Class<?> propType = reflector.getGetterType(name);

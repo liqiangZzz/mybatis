@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -147,13 +147,17 @@ public class Configuration {
 
   protected final MapperRegistry mapperRegistry = new MapperRegistry(this);
   protected final InterceptorChain interceptorChain = new InterceptorChain();
+  // 完成系统提供的 类型处理器的注册工作
   protected final TypeHandlerRegistry typeHandlerRegistry = new TypeHandlerRegistry(this);
+  // 完成 系统 数据类型 别名的注册
   protected final TypeAliasRegistry typeAliasRegistry = new TypeAliasRegistry();
   protected final LanguageDriverRegistry languageRegistry = new LanguageDriverRegistry();
 
+  // 保存的就是 所有的映射文件的信息 每一个映射文件 对应一个MappedStatement对象
   protected final Map<String, MappedStatement> mappedStatements = new StrictMap<MappedStatement>("Mapped Statements collection")
       .conflictMessageProducer((savedValue, targetValue) ->
           ". please check " + savedValue.getResource() + " and " + targetValue.getResource());
+
   // 记录 namespace 和 Cache 对象之间的对应关系
   protected final Map<String, Cache> caches = new StrictMap<>("Caches collection");
   protected final Map<String, ResultMap> resultMaps = new StrictMap<>("Result Maps collection");
@@ -180,41 +184,58 @@ public class Configuration {
     this.environment = environment;
   }
 
+  /**
+   * Configuration 构造方法：初始化 MyBatis 的默认配置项。
+   * <p>
+   * 主要完成两件事：
+   * 1. 注册内置的别名（typeAliasRegistry），使得在 mybatis-config.xml 中可以使用简写名称代替全限定类名。
+   * 2. 设置默认的语言驱动（languageRegistry），用于解析 SQL 语句。
+   */
   public Configuration() {
-    // 为类型注册别名
+    // ========== 注册事务工厂别名 ==========
     typeAliasRegistry.registerAlias("JDBC", JdbcTransactionFactory.class);
     typeAliasRegistry.registerAlias("MANAGED", ManagedTransactionFactory.class);
 
+    // ========== 注册数据源工厂别名 ==========
     typeAliasRegistry.registerAlias("JNDI", JndiDataSourceFactory.class);
     typeAliasRegistry.registerAlias("POOLED", PooledDataSourceFactory.class);
     typeAliasRegistry.registerAlias("UNPOOLED", UnpooledDataSourceFactory.class);
 
-    typeAliasRegistry.registerAlias("PERPETUAL", PerpetualCache.class);
-    typeAliasRegistry.registerAlias("FIFO", FifoCache.class);
-    typeAliasRegistry.registerAlias("LRU", LruCache.class);
-    typeAliasRegistry.registerAlias("SOFT", SoftCache.class);
-    typeAliasRegistry.registerAlias("WEAK", WeakCache.class);
+    // ========== 注册缓存实现别名 ==========
+    typeAliasRegistry.registerAlias("PERPETUAL", PerpetualCache.class);  // 默认永久缓存
+    typeAliasRegistry.registerAlias("FIFO", FifoCache.class);  // 先进先出缓存
+    typeAliasRegistry.registerAlias("LRU", LruCache.class);  // 最近最少使用缓存
+    typeAliasRegistry.registerAlias("SOFT", SoftCache.class);  // 软引用缓存
+    typeAliasRegistry.registerAlias("WEAK", WeakCache.class);  // 弱引用缓存
 
+    // ========== 注册数据库标识提供者别名 ==========
     typeAliasRegistry.registerAlias("DB_VENDOR", VendorDatabaseIdProvider.class);
 
-    typeAliasRegistry.registerAlias("XML", XMLLanguageDriver.class);
-    typeAliasRegistry.registerAlias("RAW", RawLanguageDriver.class);
+    // ========== 注册语言驱动别名 ==========
+    typeAliasRegistry.registerAlias("XML", XMLLanguageDriver.class);  // 支持动态SQL（默认）
+    typeAliasRegistry.registerAlias("RAW", RawLanguageDriver.class);  // 仅支持静态SQL
 
+    // ========== 注册日志框架别名 ==========
     typeAliasRegistry.registerAlias("SLF4J", Slf4jImpl.class);
     typeAliasRegistry.registerAlias("COMMONS_LOGGING", JakartaCommonsLoggingImpl.class);
     typeAliasRegistry.registerAlias("LOG4J", Log4jImpl.class);
     typeAliasRegistry.registerAlias("LOG4J2", Log4j2Impl.class);
     typeAliasRegistry.registerAlias("JDK_LOGGING", Jdk14LoggingImpl.class);
-    typeAliasRegistry.registerAlias("STDOUT_LOGGING", StdOutImpl.class);
-    typeAliasRegistry.registerAlias("NO_LOGGING", NoLoggingImpl.class);
+    typeAliasRegistry.registerAlias("STDOUT_LOGGING", StdOutImpl.class);  // 标准输出日志
+    typeAliasRegistry.registerAlias("NO_LOGGING", NoLoggingImpl.class);   // 关闭日志
 
+    // ========== 注册代理工厂别名 ==========
     typeAliasRegistry.registerAlias("CGLIB", CglibProxyFactory.class);
     typeAliasRegistry.registerAlias("JAVASSIST", JavassistProxyFactory.class);
+
+    // ========== 设置默认语言驱动 ==========
     // LanguageDriver 完成SQL配置信息到SqlSource对象的转换
     // XMLLanguageDriver为XML语言驱动，
-    // 为MyBatis提供了通过XML标签（我们常用的<if>、<where>等标签）结合OGNL表达式语法实现动态SQL的功能。
+    // XMLLanguageDriver：通过XML标签（<if>、<where>等）结合OGNL表达式实现动态SQL
     languageRegistry.setDefaultDriverClass(XMLLanguageDriver.class);
-    // RawLanguageDriver表示仅支持静态SQL配置，不支持动态SQL功能
+
+    // RawLanguageDriver：仅支持静态SQL，不支持动态SQL功能
+    // 注册但未设为默认，供用户按需配置
     languageRegistry.register(RawLanguageDriver.class);
   }
 
@@ -582,25 +603,59 @@ public class Configuration {
     return MetaObject.forObject(object, objectFactory, objectWrapperFactory, reflectorFactory);
   }
 
+  /**
+   * [参数处理器工厂] 创建并增强 ParameterHandler 实例。
+   */
   public ParameterHandler newParameterHandler(MappedStatement mappedStatement, Object parameterObject, BoundSql boundSql) {
+
+    // 1. 委派给语言驱动（LanguageDriver）创建实例（默认实现为 DefaultParameterHandler）
+    // 理由：不同的脚本语言（如 XML 或 Velocity）可能处理参数的逻辑略有不同
     ParameterHandler parameterHandler = mappedStatement.getLang().createParameterHandler(mappedStatement, parameterObject, boundSql);
-    // 植入插件逻辑（返回代理对象）
+
+    // 2. 【植入插件逻辑】：执行插件逻辑，若匹配拦截器则返回 JDK 动态代理对象
     parameterHandler = (ParameterHandler) interceptorChain.pluginAll(parameterHandler);
     return parameterHandler;
   }
 
+  /**
+   * [结果集处理器工厂] 创建并增强 ResultSetHandler 实例。
+   */
   public ResultSetHandler newResultSetHandler(Executor executor, MappedStatement mappedStatement, RowBounds rowBounds, ParameterHandler parameterHandler,
       ResultHandler resultHandler, BoundSql boundSql) {
+
+    // 1. 实例化默认结果集处理器（MyBatis 逻辑最复杂的组件）
     ResultSetHandler resultSetHandler = new DefaultResultSetHandler(executor, mappedStatement, parameterHandler, resultHandler, boundSql, rowBounds);
-    // 植入插件逻辑（返回代理对象）
+
+    // 2. 【植入插件逻辑】：执行插件逻辑，使拦截器可以控制结果集到 Java 对象的映射过程（返回代理对象）
     resultSetHandler = (ResultSetHandler) interceptorChain.pluginAll(resultSetHandler);
     return resultSetHandler;
   }
 
+  /**
+   * [语句处理器工厂方法] 创建并增强 StatementHandler 实例。
+   *
+   * 职责：
+   * 1. 实例化具备路由能力的语句处理器。
+   * 2. 触发拦截器链，为该处理器植入自定义插件逻辑。
+   */
   public StatementHandler newStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+
+    // 1. 【组件实例化】：创建 RoutingStatementHandler 实例。
+    // RoutingStatementHandler 内部会根据 MappedStatement 中配置的 StatementType
+    //（Simple/Prepared/Callable）动态选择并实例化具体的物理处理器实现。
     StatementHandler statementHandler = new RoutingStatementHandler(executor, mappedStatement, parameterObject, rowBounds, resultHandler, boundSql);
-    // 植入插件逻辑（返回代理对象）
+
+    /*
+     * 2. 【插件代理注入】：AOP 机制的关键环节。
+     *
+     * 逻辑：遍历已注册的拦截器链 (InterceptorChain)，对创建好的处理器执行 pluginAll 操作。
+     * 产出：如果该接口存在对应的拦截器，该方法将返回一个【JDK 动态代理对象】。
+     * 意义：使得开发者可以通过插件拦截 StatementHandler 的核心方法（如 prepare, parameterize, update, query），
+     *      实现诸如 SQL 性能监控、动态 SQL 修改或权限过滤等功能。
+     */
     statementHandler = (StatementHandler) interceptorChain.pluginAll(statementHandler);
+
+    // 3. 返回被层层代理增强后的语句处理器实例
     return statementHandler;
   }
 
@@ -608,23 +663,44 @@ public class Configuration {
     return newExecutor(transaction, defaultExecutorType);
   }
 
+  /**
+   * 1. 完成执行器的创建(Executor)
+   * 2. 完成二级缓存的设置  装饰器模式
+   * 3. 完成插件逻辑的植入  装饰器模式
+   * @param transaction  事务管理器
+   * @param executorType 默认是 Simple
+   * @return
+   */
   public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
+    // 1. 确定执行策略：若未指定则使用全局默认配置，全局无配置则默认为 SIMPLE
     executorType = executorType == null ? defaultExecutorType : executorType;
     executorType = executorType == null ? ExecutorType.SIMPLE : executorType;
     Executor executor;
+    // 2. 根据类型创建基础执行器（基类）
     if (ExecutorType.BATCH == executorType) {
+      // 批量执行器：缓存并批量执行SQL，适用于批量更新场景
       executor = new BatchExecutor(this, transaction);
-    } else if (ExecutorType.REUSE == executorType) { // 针对 Statement 对象做缓存
+    } else if (ExecutorType.REUSE == executorType) {
+      // 可复用执行器：缓存Statement对象，相同SQL复用预编译语句
       executor = new ReuseExecutor(this, transaction);
     } else {
+      // 基本执行器
       // 默认 SimpleExecutor 每一次只是SQL操作都创建一个新的Statement对象
       executor = new SimpleExecutor(this, transaction);
     }
-    // 二级缓存开关，settings 中的 cacheEnabled 默认是 true
+
+    // 3. 【装饰器模式】：若开启了全局二级缓存，则使用 CachingExecutor 对原始执行器进行包装
+    // CachingExecutor 负责查询前的二级缓存检索逻辑，若未命中再委派给上述具体的执行器
+    // 条件：cacheEnabled = true（全局配置）默认是 true，且对应Mapper配置了<cache>标签--> 创建 Cache对象
     if (cacheEnabled) {
+      // 穿衣服的事情 --> 装饰器模式
+      // 用CachingExecutor包装基础执行器，添加二级缓存功能
       executor = new CachingExecutor(executor);
     }
-    // 植入插件的逻辑，至此，四大对象已经全部拦截完毕
+
+    // 4. 【插件/拦截器注入】：这是拦截器生效的关键点
+    // 遍历拦截器链（InterceptorChain），为执行器对象生成层层嵌套的代理实例（JDK 动态代理）
+    // 使得插件可以拦截 Executor 接口定义的所有核心方法
     executor = (Executor) interceptorChain.pluginAll(executor);
     return executor;
   }
@@ -788,6 +864,21 @@ public class Configuration {
     mapperRegistry.addMapper(type);
   }
 
+  /**
+   * 怎么获取 Mapper 接口的代理对象
+   * 存储关系：
+   *    1.系统启动的时候
+   *       接口类型 --》 MapperProxyFactory --》 MapperProxy --> MapperMethod 的映射关系存储在 MapperRegistry 中
+   *
+   *  获取Mapper代理对象
+   *      根据传递的接口类型 从 MapperRegistry 中获取对应的
+   *      MapperProxyFactory对象
+   *      然后 根据 MapperProxyFactory 对象获取 MapperProxy对象
+   * @param type Mapper接口类型
+   * @param sqlSession SqlSession对象
+   * @param <T> Mapper接口类型
+   * @return Mapper接口的代理对象
+   */
   public <T> T getMapper(Class<T> type, SqlSession sqlSession) {
     // mapperRegistry中注册的有Mapper的相关信息 在解析映射文件时 调用过addMapper方法
     return mapperRegistry.getMapper(type, sqlSession);

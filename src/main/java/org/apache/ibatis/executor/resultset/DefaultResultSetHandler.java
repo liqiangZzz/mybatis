@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -222,6 +222,7 @@ public class DefaultResultSetHandler implements ResultSetHandler {
         ResultMapping parentMapping = nextResultMaps.get(resultSets[resultSetCount]);
         if (parentMapping != null) {
           String nestedResultMapId = parentMapping.getNestedResultMapId();
+          // 结果集对应的ResultMap
           ResultMap resultMap = configuration.getResultMap(nestedResultMapId);
           handleResultSet(rsw, resultMap, null, parentMapping);
         }
@@ -452,7 +453,7 @@ public class DefaultResultSetHandler implements ResultSetHandler {
       boolean foundValues = this.useConstructorMappings;
       // 是否允许进行自动映射
       if (shouldApplyAutomaticMappings(resultMap, false)) {
-        // 自动映射  映射ResultMap中未明确的列
+        // 自动映射  映射ResultMap中未明确的列 没有使用ResultMap 标签的情况  user  address  address
         foundValues = applyAutomaticMappings(rsw, resultMap, metaObject, columnPrefix) || foundValues;
       }
       // 处理ResultMap中有映射关系的属性
@@ -482,6 +483,7 @@ public class DefaultResultSetHandler implements ResultSetHandler {
   private boolean applyPropertyMappings(ResultSetWrapper rsw, ResultMap resultMap, MetaObject metaObject, ResultLoaderMap lazyLoader, String columnPrefix)
       throws SQLException {
     // 获取该ResultMap中明确需要进行映射的列名的集合
+    // userName  user_name
     final List<String> mappedColumnNames = rsw.getMappedColumnNames(resultMap, columnPrefix);
     boolean foundValues = false;
     final List<ResultMapping> propertyMappings = resultMap.getPropertyResultMappings();
@@ -511,7 +513,7 @@ public class DefaultResultSetHandler implements ResultSetHandler {
           foundValues = true;
         }
         if (value != null || (configuration.isCallSettersOnNulls() && !metaObject.getSetterType(property).isPrimitive())) {
-          // gcode issue #377, call setter on nulls (value is not 'found')
+          // gcode issue #377, call setter on nulls (value is not 'found') 完成了 对象属性的填充
           metaObject.setValue(property, value);
         }
       }

@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -22,9 +22,25 @@ import org.apache.ibatis.cache.Cache;
 import org.apache.ibatis.cache.CacheException;
 
 /**
+ * 缓存中最基础的实现方法 --- 本方法是将缓存数据存储在内存中
+ *    如果我们要改变 缓存数据的存储方式 只需要重新定义 Cache 接口的实现即可
+ * <p>
  * 在装饰器模式用 用来被装饰的对象
  * 缓存中的  基本缓存处理的实现
  * 其实就是一个 HashMap 的基本操作
+ * <p>
+ * 我们还要考虑很多实际的缓存使用情况。
+ *   1. 缓存占用了太多的内存之后的淘汰策略问题
+ *   2. 缓存是否同步
+ *   ...
+ * <p>
+ *   PerpetualCache 太简单了，我们需要对他做增强处理 --> 代理模式
+ *   1.缓存数据淘汰机制
+ *   2.缓存数据的存放机制
+ *   3.缓存数据添加是否同步【阻塞】
+ *   4.缓存对象是否做同步处理
+ *   .....
+ *   ---> 装饰者模式
  * @author Clinton Begin
  */
 public class PerpetualCache implements Cache {

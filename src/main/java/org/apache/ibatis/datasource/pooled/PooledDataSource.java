@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ public class PooledDataSource implements DataSource {
   protected boolean poolPingEnabled; // 是否允许发送测试SQL语句
   // 当连接超过 poolPingConnectionsNotUsedFor毫秒未使用时，会发送一次测试SQL语句，检测连接是否正常
   protected int poolPingConnectionsNotUsedFor;
- // 根据数据库URL，用户名和密码生成的一个hash值。
+ // 根据数据库URL，用户名和密码生成的一个hash值。  判断该连接是否是当前数据库的连接
   private int expectedConnectionTypeCode;
 
   public PooledDataSource() {
@@ -86,6 +86,12 @@ public class PooledDataSource implements DataSource {
     expectedConnectionTypeCode = assembleConnectionTypeCode(dataSource.getUrl(), dataSource.getUsername(), dataSource.getPassword());
   }
 
+  /**
+   * 从数据库连接池中获取 Connection 对象
+   *    返回的是 Connection的代理对象
+   * @return
+   * @throws SQLException
+   */
   @Override
   public Connection getConnection() throws SQLException {
     return popConnection(dataSource.getUsername(), dataSource.getPassword()).getProxyConnection();
@@ -412,6 +418,13 @@ public class PooledDataSource implements DataSource {
     }
   }
 
+  /**
+   * 从连接池中获取一个 Connection对象
+   * @param username
+   * @param password
+   * @return
+   * @throws SQLException
+   */
   private PooledConnection popConnection(String username, String password) throws SQLException {
     boolean countedWait = false;
     PooledConnection conn = null;
@@ -426,7 +439,9 @@ public class PooledDataSource implements DataSource {
           if (log.isDebugEnabled()) {
             log.debug("Checked out connection " + conn.getRealHashCode() + " from pool.");
           }
-        } else {// 当前连接池 没有空闲连接
+        } else {// 当前连接池 没有空闲连接 1.当前连接数量没有超过最大数量，那么就创建新的连接
+          //                           2.当前连接数量超过了最大数量，
+          //                                   2.1  判断有没有连接超时的 连接 如果有处理 如果没有就阻塞
           // Pool does not have available connection
           if (state.activeConnections.size() < poolMaximumActiveConnections) { // 活跃数没有达到最大连接数 可以创建新的连接
             // Can create new connection 创建新的数据库连接
@@ -435,7 +450,7 @@ public class PooledDataSource implements DataSource {
               log.debug("Created connection " + conn.getRealHashCode() + ".");
             }
           } else { // 活跃数已经达到了最大数 不能创建新的连接
-            // Cannot create new connection 获取最先创建的活跃连接
+            // Cannot create new connection 获取最先创建的活跃连接  获取活跃连接数中的 第一个连接
             PooledConnection oldestActiveConnection = state.activeConnections.get(0);
             // 获取该连接的超时时间
             long longestCheckoutTime = oldestActiveConnection.getCheckoutTime();

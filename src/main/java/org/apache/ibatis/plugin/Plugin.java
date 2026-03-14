@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ public class Plugin implements InvocationHandler {
    */
   public static Object wrap(Object target, Interceptor interceptor) {
     // 获取用户自定义 Interceptor中@Signature注解的信息
-    // getSignatureMap 负责处理@Signature 注解
+    // getSignatureMap 负责处理@Signature 注解  interceptor 自定义的拦截器
     Map<Class<?>, Set<Method>> signatureMap = getSignatureMap(interceptor);
     // 获取目标类型
     Class<?> type = target.getClass();
@@ -77,7 +77,7 @@ public class Plugin implements InvocationHandler {
   @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
     try {
-      // 获取当前方法所在类或接口中，可被当前Interceptor拦截的方法
+      // 获取当前方法所在类或接口中，可被当前Interceptor拦截的方法 Executor query
       Set<Method> methods = signatureMap.get(method.getDeclaringClass());
       if (methods != null && methods.contains(method)) {
         // 当前调用的方法需要被拦截 执行拦截操作

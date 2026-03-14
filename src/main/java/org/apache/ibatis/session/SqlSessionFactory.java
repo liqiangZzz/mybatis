@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -19,7 +19,8 @@ import java.sql.Connection;
 
 /**
  * Creates an {@link SqlSession} out of a connection or a DataSource
- *
+ *  SqlSessionFactory -- > 工厂模式
+ *  SqlSessionFactory 这个对象的创建 本身是通过建造者模式创建的
  * @author Clinton Begin
  */
 public interface SqlSessionFactory {
@@ -40,6 +41,7 @@ public interface SqlSessionFactory {
 
   SqlSession openSession(ExecutorType execType, Connection connection);
 
+  // Configuration对象封装了全局配置文件和映射文件中的相关信息
   Configuration getConfiguration();
 
 }

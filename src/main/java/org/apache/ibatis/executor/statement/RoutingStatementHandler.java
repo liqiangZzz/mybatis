@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2021 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -40,16 +40,36 @@ public class RoutingStatementHandler implements StatementHandler {
   // 封装的有真正的 StatementHandler 对象
   private final StatementHandler delegate;
 
+
+  /**
+   * [策略分发中枢] 根据配置的 Statement 类型选择具体的处理器实现。
+   *
+   * RoutingStatementHandler 本身不执行任何实质性的物理操作，
+   * 它通过内部持有的 delegate（委派对象）来实现具体的 JDBC 交互逻辑。
+   */
   public RoutingStatementHandler(Executor executor, MappedStatement ms, Object parameter, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
-    // StatementType 是怎么来的？ 增删改查标签中的 statementType="PREPARED"，默认值 PREPARED
+    // 1. 【策略决策机制】：
+    // 从 MappedStatement 获取指定的 Statement 类型（来源于 XML 标签中的 statementType 属性）。
+    // STATEMENT：使用 Statement，不进行预编译。
+    // PREPARED：使用 PreparedStatement，进行预编译。
+    // CALLABLE：使用 CallableStatement，用于调用存储过程。
+    // MyBatis 默认使用 PREPARED 类型。
     switch (ms.getStatementType()) {
+
+      // 场景 A：对应 JDBC 的原始 java.sql.Statement
+      // 逻辑：直接拼接 SQL 文本，不进行预编译处理，通常用于非参数化的简单查询。
       case STATEMENT:
         delegate = new SimpleStatementHandler(executor, ms, parameter, rowBounds, resultHandler, boundSql);
         break;
+
+      // 场景 B：对应 JDBC 的 java.sql.PreparedStatement（最常用）
+      // 逻辑：支持带 ? 占位符的 SQL 预编译，提供更高的安全性和执行性能。
       case PREPARED:
-        // 创建 StatementHandler 的时候做了什么？ >>
         delegate = new PreparedStatementHandler(executor, ms, parameter, rowBounds, resultHandler, boundSql);
         break;
+
+      // 场景 C：对应 JDBC 的 java.sql.CallableStatement
+      // 逻辑：专门用于处理数据库存储过程的调用。
       case CALLABLE:
         delegate = new CallableStatementHandler(executor, ms, parameter, rowBounds, resultHandler, boundSql);
         break;

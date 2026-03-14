@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -257,6 +257,7 @@ public class ResolverUtil<T> {
       }
 
       Class<?> type = loader.loadClass(externalName);
+      // 通过源码我们可以看到 test 中要匹配的类型是 Object
       if (test.matches(type)) {
         matches.add((Class<T>) type);
       }

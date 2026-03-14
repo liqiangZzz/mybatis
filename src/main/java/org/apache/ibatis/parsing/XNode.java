@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2021 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -319,16 +319,40 @@ public class XNode {
     return children;
   }
 
+  /**
+   * 将当前节点的所有子节点转换为Properties对象。
+   *
+   * <p>该方法专门用于处理如下格式的XML结构：
+   * <pre>
+   * <properties>
+   * <property name="username" value="root"/>
+   * <property name="password" value="123456"/>
+   * </properties>
+   * </pre>
+   *
+   * 转换结果：{"username"="root", "password"="123456"}
+   *
+   * @return Properties对象，包含所有子节点中有效的name-value键值对
+   *         （忽略缺少name或value属性的子节点）
+   */
   public Properties getChildrenAsProperties() {
+    // 1. 创建空的Properties对象（本质是一个Hashtable）
     Properties properties = new Properties();
+
+    // 2. 遍历当前节点的所有直接子节点
     for (XNode child : getChildren()) {
-      // 获取对应的name和value属性
+      // 2.1 从子节点中提取"name"属性和"value"属性
       String name = child.getStringAttribute("name");
       String value = child.getStringAttribute("value");
+
+      // 2.2 只有当name和value都存在时才添加到Properties中
+      //     这种校验确保了配置项的完整性，避免出现无效条目
       if (name != null && value != null) {
         properties.setProperty(name, value);
       }
+      // 注：缺少name或value的节点会被静默忽略（符合MyBatis配置的容错性）
     }
+    // 3. 返回填充好的Properties对象
     return properties;
   }
 

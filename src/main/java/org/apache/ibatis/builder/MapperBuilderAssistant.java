@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -54,9 +54,13 @@ import org.apache.ibatis.type.TypeHandler;
  */
 public class MapperBuilderAssistant extends BaseBuilder {
 
+  // 当前解析的 Mapper 命名空间
   private String currentNamespace;
+  // 当前解析的 Mapper 文件路径
   private final String resource;
+  // 当前命名空间对应的 cache
   private Cache currentCache;
+  // 标识是否成功解析 Cache 引用
   private boolean unresolvedCacheRef; // issue #676
 
   public MapperBuilderAssistant(Configuration configuration, String resource) {
@@ -122,6 +126,17 @@ public class MapperBuilderAssistant extends BaseBuilder {
     }
   }
 
+  /**
+   *  创建二级缓存
+   * @param typeClass 缓存类型
+   * @param evictionClass 缓存回收策略类型
+   * @param flushInterval 刷新间隔
+   * @param size 缓存容量
+   * @param readWrite 读写
+   * @param blocking 是否阻塞
+   * @param props 启动属性
+   * @return Cache
+   */
   public Cache useNewCache(Class<? extends Cache> typeClass,
       Class<? extends Cache> evictionClass,
       Long flushInterval,
@@ -129,15 +144,17 @@ public class MapperBuilderAssistant extends BaseBuilder {
       boolean readWrite,
       boolean blocking,
       Properties props) {
+    // CacheBuilder 构建Cache对象
     Cache cache = new CacheBuilder(currentNamespace)
-        .implementation(valueOrDefault(typeClass, PerpetualCache.class))
-        .addDecorator(valueOrDefault(evictionClass, LruCache.class))
-        .clearInterval(flushInterval)
-        .size(size)
-        .readWrite(readWrite)
-        .blocking(blocking)
-        .properties(props)
+        .implementation(valueOrDefault(typeClass, PerpetualCache.class)) // 如果有制定的缓存实现就用自定义的否则用PerpetualCache
+        .addDecorator(valueOrDefault(evictionClass, LruCache.class))// 添加装饰器
+        .clearInterval(flushInterval) // 设置刷新间隔
+        .size(size) //设置缓存容量
+        .readWrite(readWrite) // 读写
+        .blocking(blocking) // 是否阻塞
+        .properties(props) // 启动属性
         .build();
+    // 有将 二级缓存的 Cache 对象添加到 Configuration 对象中
     configuration.addCache(cache);
     currentCache = cache; // 记录当前名称空间记录的 cache
     return cache;
@@ -242,6 +259,32 @@ public class MapperBuilderAssistant extends BaseBuilder {
     return new Discriminator.Builder(configuration, resultMapping, namespaceDiscriminatorMap).build();
   }
 
+  /**
+   * [元数据聚合与注册] 构建并向 Configuration 注册 MappedStatement 对象。
+   *
+   * 此方法是 CRUD 标签解析的最后一步，它将分散的属性（SQL、缓存、映射关系）聚合为单一的执行单元。
+   * @param id 标签的全限定名
+   * @param sqlSource SQL 语句源码
+   * @param statementType 语句类型
+   * @param sqlCommandType SQL 语句类型
+   * @param fetchSize 获取数量
+   * @param timeout 超时时间
+   * @param parameterMap 参数映射
+   * @param parameterType 参数类型
+   * @param resultMap 结果映射
+   * @param resultType 结果类型
+   * @param resultSetType 结果集类型
+   * @param flushCache 是否刷新缓存
+   * @param useCache 是否使用缓存
+   * @param resultOrdered 是否结果有序
+   * @param keyGenerator 键生成器
+   * @param keyProperty 键属性
+   * @param keyColumn 键列
+   * @param databaseId 数据库ID
+   * @param lang 语言驱动
+   * @param resultSets 结果集
+   * @return
+   */
   public MappedStatement addMappedStatement(
       String id,
       SqlSource sqlSource,
@@ -264,13 +307,16 @@ public class MapperBuilderAssistant extends BaseBuilder {
       LanguageDriver lang,
       String resultSets) {
 
+    // 1. 【前置校验】：检查当前 Mapper 的二级缓存引用（cache-ref）是否已解析完成
     if (unresolvedCacheRef) {
       throw new IncompleteElementException("Cache-ref not yet resolved");
     }
 
+    // 2. 【ID 标准化】：为简单的 ID 加上 namespace 前缀（如 "selectById" -> "com.xxx.UserMapper.selectById"）
     id = applyCurrentNamespace(id, false);
     boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
 
+    // 3. 【执行单元构建】：利用建造者模式（Builder）聚合所有核心元数据
     MappedStatement.Builder statementBuilder = new MappedStatement.Builder(configuration, id, sqlSource, sqlCommandType)
         .resource(resource)
         .fetchSize(fetchSize)
@@ -283,19 +329,29 @@ public class MapperBuilderAssistant extends BaseBuilder {
         .lang(lang)
         .resultOrdered(resultOrdered)
         .resultSets(resultSets)
+        // 解析并填充结果映射集合（ResultMap）
         .resultMaps(getStatementResultMaps(resultMap, resultType, id))
         .resultSetType(resultSetType)
+        // 策略设置：根据是否为 SELECT 语句确定默认的缓存刷新和使用策略
         .flushCacheRequired(valueOrDefault(flushCache, !isSelect))
         .useCache(valueOrDefault(useCache, isSelect))
+        // 绑定当前 Namespace 对应的二级缓存实例
         .cache(currentCache);
 
+    // 4. 【参数映射处理】：处理过时的 parameterMap 或根据 parameterType 构建参数元数据
     ParameterMap statementParameterMap = getStatementParameterMap(parameterMap, parameterType, id);
     if (statementParameterMap != null) {
       statementBuilder.parameterMap(statementParameterMap);
     }
 
+    // 5. 【实例化】：产出完整的 MappedStatement 实例
     MappedStatement statement = statementBuilder.build();
-    // 最关键的一步，在 Configuration 添加了 MappedStatement >> 对应的就是一个 CRUD 标签
+
+    /*
+     * 6. 【全局注册】：核心动作。
+     * 将封装好的 MappedStatement >> 对应的就是一个 CRUD 标签对象存入 Configuration 的 StrictMap 注册表中。
+     * 此后，Executor 执行器即可通过 ID 检索到对应的 SQL 指令并执行。
+     */
     configuration.addMappedStatement(statement);
     return statement;
   }

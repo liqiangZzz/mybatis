@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ public class InterceptorChain {
   // 保存所有的 Interceptor  也就我所有的插件是保存在 Interceptors 这个List集合中的
   private final List<Interceptor> interceptors = new ArrayList<>();
 
-  //
+  // 现在我们定义的有一个 Interceptor MyInterceptor
   public Object pluginAll(Object target) {
     for (Interceptor interceptor : interceptors) { // 获取拦截器链中的所有拦截器
       target = interceptor.plugin(target); // 创建对应的拦截器的代理对象

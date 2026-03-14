@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -32,6 +32,8 @@ class MetaClassTest {
   void shouldTestDataTypeOfGenericMethod() {
     ReflectorFactory reflectorFactory = new DefaultReflectorFactory();
     MetaClass meta = MetaClass.forClass(GenericConcrete.class, reflectorFactory);
+    System.out.println("meta.getGetterType(\"id\") = " + meta.getGetterType("id"));
+    System.out.println("meta.getSetterType(\"id\") = " + meta.getSetterType("id"));
     assertEquals(Long.class, meta.getGetterType("id"));
     assertEquals(Long.class, meta.getSetterType("id"));
   }
@@ -41,7 +43,7 @@ class MetaClassTest {
     try {
       ReflectorFactory reflectorFactory = new DefaultReflectorFactory();
       MetaClass meta = MetaClass.forClass(RichType.class, reflectorFactory);
-      meta.getGetterType("aString");
+      meta.getGetterType("String");
       org.junit.jupiter.api.Assertions.fail("should have thrown ReflectionException");
     } catch (ReflectionException expected) {
       assertEquals("There is no getter for property named \'aString\' in \'class org.apache.ibatis.domain.misc.RichType\'", expected.getMessage());

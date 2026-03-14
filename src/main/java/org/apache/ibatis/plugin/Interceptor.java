@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import java.util.Properties;
  */
 public interface Interceptor {
 
-  // 执行拦截逻辑的方法 111
+  // 执行拦截逻辑的方法
   Object intercept(Invocation invocation) throws Throwable;
 
   // 决定是否触发 intercept()方法

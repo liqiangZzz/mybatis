@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2021 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -122,44 +122,71 @@ public class MapperAnnotationBuilder {
     this.type = type;
   }
 
+  /**
+   * 解析接口级别的元数据（注解、缓存、关联 XML）。
+   */
   public void parse() {
     String resource = type.toString();
+    // 确保同一接口不被重复解析
     if (!configuration.isResourceLoaded(resource)) {
-      // 先判断 Mapper.xml 有没有解析，没有的话先解析 Mapper.xml（例如定义 package 方式）
+      // 【资源互补】：尝试加载与接口同名同路径的 XML 文件，确保 XML 和注解定义的 SQL 都能被收集（例如定义 package 方式）
       loadXmlResource();
       configuration.addLoadedResource(resource);
       assistant.setCurrentNamespace(type.getName());
-      // 处理 @CacheNamespace
+
+      // 解析接口上的缓存配置注解 (@CacheNamespace)
       parseCache();
-      // 处理 @CacheNamespaceRef
+
+      // 解析接口上的缓存引用注解 (@CacheNamespaceRef)
       parseCacheRef();
-      // 获取所有方法
+
+      // 遍历接口中定义的所有方法
       Method[] methods = type.getMethods();
       for (Method method : methods) {
         try {
           // issue #237
           if (!method.isBridge()) {
-            // 解析方法上的注解，添加到 MappedStatement 集合中 >>
+
+            // 【核心逻辑】：解析具体方法上的 SQL 注解，并封装为 MappedStatement 注册到 Configuration
             parseStatement(method);
           }
         } catch (IncompleteElementException e) {
+          // 若由于某些依赖未就绪导致解析失败，存入延迟解析队列
           configuration.addIncompleteMethod(new MethodResolver(this, method));
         }
       }
     }
+    // 解析延迟方法
+    // 处理之前由于引用关系不完整而挂起的方法解析
     parsePendingMethods();
   }
 
+
+  /**
+   * [延迟解析重试] 尝试重新解析之前挂起的“不完整”Mapper 方法。
+   *
+   * 在解析注解 Mapper 时，若某个方法引用的资源（如跨命名空间的 ResultMap）尚未加载，
+   * 该方法会被暂存到 Configuration 的 incompleteMethods 集合中。此方法负责循环触发重试逻辑。
+   */
   private void parsePendingMethods() {
+    // 1. 获取全局配置中存储的“不完整方法解析器”集合
     Collection<MethodResolver> incompleteMethods = configuration.getIncompleteMethods();
+
+    // 2. 【同步锁定】：确保在并发解析环境（如多线程扫描 Mapper）下，待处理队列的线程安全
     synchronized (incompleteMethods) {
       Iterator<MethodResolver> iter = incompleteMethods.iterator();
       while (iter.hasNext()) {
         try {
+          // 3. 核心重试逻辑：调用 MethodResolver 的 resolve 方法
+          // 该方法内部会重新触发 parseStatement 逻辑
           iter.next().resolve();
+
+          // 4. 解析成功：从待处理队列中移除该方法
           iter.remove();
         } catch (IncompleteElementException e) {
           // This method is still missing a resource
+          // 5. 解析依然失败：捕获异常但不做处理。
+          // 这说明该方法依赖的外部资源在当前时刻仍未被完全加载，继续保留在队列中，等待后续重试。
         }
       }
     }
@@ -301,36 +328,65 @@ public class MapperAnnotationBuilder {
     return null;
   }
 
+  /**
+   * [接口方法解析] 将 Mapper 接口方法上的注解提取并封装为 MappedStatement。
+   *
+   * 此方法实现了注解开发模式下，从 Java 方法元数据到执行指令的完整转换。
+   */
   void parseStatement(Method method) {
+    // 1. 【元数据准备】：提取参数类型和脚本语言驱动程序（如 JSR-223 脚本引擎）
     Class<?> parameterTypeClass = getParameterType(method);
     LanguageDriver languageDriver = getLanguageDriver(method);
-    // 从方法上获取 SQL
+
+    // 2. 【SQL 提取】：解析方法上的 @Select/@Update/@Insert/@Delete 注解，生成 SqlSource
+    // 此步骤会处理注解中的 SQL 文本，识别占位符
     SqlSource sqlSource = getSqlSourceFromAnnotations(method, parameterTypeClass, languageDriver);
+
     if (sqlSource != null) {
+      // 3. 【配置预设】：获取 @Options 注解并生成默认的执行参数
       // @Options 可以设置缓存、自增主键等
       Options options = method.getAnnotation(Options.class);
+      // 生成全局唯一的 Statement ID：接口全类名.方法名
       final String mappedStatementId = type.getName() + "." + method.getName();
+
+      // 定义执行所需的各种默认属性
       Integer fetchSize = null;
       Integer timeout = null;
+      // 默认使用 PREPARED 语句类型，可选值有 STATEMENT、PREPARED、CALLABLE；对应 JDBCTemplate 中的 Statement 类型
+      // STATEMENT：使用 Statement 对象，不进行预编译
+      // PREPARED：使用 PreparedStatement 对象，进行预编译
+      // CALLABLE: 使用 CallableStatement 对象，调用存储过程
       StatementType statementType = StatementType.PREPARED;
+
+      // 默认结果集类型，可选值有 DEFAULT、SCROLL_SENSITIVE、SCROLLInsensitive；对应 JDBCTemplate 中的 ResultSet 类型
+      // DEFAULT：使用默认结果集类型
+      // SCROLL_SENSITIVE：使用可滚动、敏感结果集类型
+      // SCROLLInsensitive：使用可滚动、Insensitive 结果集类型
       ResultSetType resultSetType = configuration.getDefaultResultSetType();
       SqlCommandType sqlCommandType = getSqlCommandType(method);
+
+      // 缓存策略预设：只有 SELECT 默认使用二级缓存，非 SELECT 默认刷新缓存
       boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
       boolean flushCache = !isSelect;
       boolean useCache = isSelect;
 
+      // 4. 【主键生成逻辑处理】：针对 INSERT 和 UPDATE 的特殊处理，生成主键
       KeyGenerator keyGenerator;
       String keyProperty = null;
       String keyColumn = null;
       if (SqlCommandType.INSERT.equals(sqlCommandType) || SqlCommandType.UPDATE.equals(sqlCommandType)) {
         // first check for SelectKey annotation - that overrides everything else
+
+        // 优先级 A：首先检查是否有 @SelectKey 注解（手动指定主键查询 SQL）
         // @SelectKey 返回该条记录的主键
         SelectKey selectKey = method.getAnnotation(SelectKey.class);
         if (selectKey != null) {
           keyGenerator = handleSelectKeyAnnotation(selectKey, mappedStatementId, getParameterType(method), languageDriver);
           keyProperty = selectKey.keyProperty();
+          // 优先级 B：若无 @Options 注解，参考全局配置是否开启自动回填主键
         } else if (options == null) {
           keyGenerator = configuration.isUseGeneratedKeys() ? Jdbc3KeyGenerator.INSTANCE : NoKeyGenerator.INSTANCE;
+          // 优先级 C：解析 @Options 中关于主键回填的具体配置
         } else {
           keyGenerator = options.useGeneratedKeys() ? Jdbc3KeyGenerator.INSTANCE : NoKeyGenerator.INSTANCE;
           keyProperty = options.keyProperty();
@@ -340,6 +396,7 @@ public class MapperAnnotationBuilder {
         keyGenerator = NoKeyGenerator.INSTANCE;
       }
 
+      // 5. 【属性覆盖】：利用 @Options 中的配置覆盖默认值
       if (options != null) {
         if (FlushCachePolicy.TRUE.equals(options.flushCache())) {
           flushCache = true;
@@ -355,15 +412,19 @@ public class MapperAnnotationBuilder {
         }
       }
 
+      // 6. 【结果映射处理】：确定返回值映射关系
       String resultMapId = null;
-      // @ResultMap 定义返回值
+      // 优先获取 @ResultMap 注解指定的 ID
       ResultMap resultMapAnnotation = method.getAnnotation(ResultMap.class);
       if (resultMapAnnotation != null) {
         resultMapId = String.join(",", resultMapAnnotation.value());
+
+        // 针对 SELECT 语句，若无显式 ResultMap，则根据方法返回类型动态推断生成
       } else if (isSelect) {
         resultMapId = parseResultMap(method);
       }
 
+      // 7. 【最终注册】：调用构建助手，将所有元数据持久化到 Configuration 容器中
       // 最后 增删改查标签 也要添加到 MappedStatement 集合中
       assistant.addMappedStatement(
           mappedStatementId,
@@ -372,8 +433,7 @@ public class MapperAnnotationBuilder {
           sqlCommandType,
           fetchSize,
           timeout,
-          // ParameterMapID
-          null,
+          null,    // ParameterMapID
           parameterTypeClass,
           resultMapId,
           getReturnType(method),
@@ -381,12 +441,11 @@ public class MapperAnnotationBuilder {
           flushCache,
           useCache,
           // TODO gcode issue #577
-          false,
+          false, // resultOrdered
           keyGenerator,
           keyProperty,
           keyColumn,
-          // DatabaseID
-          null,
+          null,    // DatabaseID
           languageDriver,
           // ResultSets
           options != null ? nullOrEmpty(options.resultSets()) : null);

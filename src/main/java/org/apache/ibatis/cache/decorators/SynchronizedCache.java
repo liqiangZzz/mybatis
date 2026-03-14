@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -18,10 +18,13 @@ package org.apache.ibatis.cache.decorators;
 import org.apache.ibatis.cache.Cache;
 
 /**
+ * 这是一个装饰器
+ *    本身不实现 缓存数据的 读写操作  而是通过 委托的代理对象来实现
  * @author Clinton Begin
  */
 public class SynchronizedCache implements Cache {
 
+  // 默认的实现就是 PerpetualCache 来实现缓存数据的 读写操作
   private final Cache delegate;
 
   public SynchronizedCache(Cache delegate) {

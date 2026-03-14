@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2021 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -50,15 +50,30 @@ public abstract class BaseStatementHandler implements StatementHandler {
 
   protected BoundSql boundSql;
 
+  /**
+   * [基础语句处理器构造] 初始化 JDBC 执行环境并组装关联组件。
+   *
+   * BaseStatementHandler 负责协调 MyBatis 执行链条中的“四大对象”：
+   * 1. Executor (在此之前已创建)
+   * 2. StatementHandler (当前对象)
+   * 3. ParameterHandler (此处创建)
+   * 4. ResultSetHandler (此处创建)
+   */
   protected BaseStatementHandler(Executor executor, MappedStatement mappedStatement, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) {
+
+    // 1. 【引用赋值】：存储全局配置、执行器引用及 SQL 映射元数据
     this.configuration = mappedStatement.getConfiguration();
     this.executor = executor;
     this.mappedStatement = mappedStatement;
     this.rowBounds = rowBounds;
 
+    // 2. 【工具准备】：从全局配置中提取类型处理器注册表及对象实例化工厂
     this.typeHandlerRegistry = configuration.getTypeHandlerRegistry();
     this.objectFactory = configuration.getObjectFactory();
 
+    // 3. 【SQL 指令判定】：确保 BoundSql（物理 SQL 对象）已就绪
+    // 若 boundSql 为空（通常发生在处理存储过程或特定主键生成场景时），
+    // 则先执行主键生成逻辑，再通过解析引擎动态生成 BoundSql。
     if (boundSql == null) { // issue #435, get the key before calculating the statement
       generateKeys(parameterObject);
       boundSql = mappedStatement.getBoundSql(parameterObject);
@@ -66,9 +81,17 @@ public abstract class BaseStatementHandler implements StatementHandler {
 
     this.boundSql = boundSql;
 
-    // 创建了四大对象的其它两大对象 >>
-    // 创建这两大对象的时候分别做了什么？
+    /*
+     * 4. 【核心组件组装】：通过 Configuration 工厂方法创建另外两大核心对象。
+     *
+     * 注意：这两个 new 方法内部不仅是简单的实例化，还会触发拦截器链（InterceptorChain），
+     * 将插件（Plugin）包装在这些对象之上。
+     */
+
+    // 创建参数处理器：负责将 Java 实参映射到 JDBC PreparedStatement 的占位符（?）上。
     this.parameterHandler = configuration.newParameterHandler(mappedStatement, parameterObject, boundSql);
+
+    // 创建结果集处理器：负责将 JDBC 返回的 ResultSet 行记录转换为 Java 结果对象（POJO/Map）。
     this.resultSetHandler = configuration.newResultSetHandler(executor, mappedStatement, rowBounds, parameterHandler, resultHandler, boundSql);
   }
 

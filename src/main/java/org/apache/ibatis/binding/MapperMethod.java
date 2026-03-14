@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSession;
 
 /**
+ * Mapper接口对应要执行的方法
  * @author Clinton Begin
  * @author Eduardo Macarron
  * @author Lasse Voss
@@ -46,7 +47,7 @@ import org.apache.ibatis.session.SqlSession;
  */
 public class MapperMethod {
 
-  // statement id （例如：com.gupaoedu.mapper.BlogMapper.selectBlogById） 和 SQL 类型
+  // statement id （例如：com.bobo.mapper.BlogMapper.selectBlogById） 和 SQL 类型
   private final SqlCommand command;
   // 方法签名，主要是返回值的类型
   private final MethodSignature method;
@@ -56,14 +57,23 @@ public class MapperMethod {
     this.method = new MethodSignature(config, mapperInterface, method);
   }
 
+
+  /**
+   * [核心分发引擎] 根据 SQL 指令类型与方法签名执行对应的 SqlSession 操作。
+   *
+   * @param sqlSession 当前活跃的会话实例
+   * @param args       外部传入的原始参数数组
+   * @return 数据库操作结果（已转换为方法声明的返回类型）
+   */
   public Object execute(SqlSession sqlSession, Object[] args) {
     Object result;
-    switch (command.getType()) { // 根据SQL语句的类型调用SqlSession对应的方法
+    // 1. 【类型决策】：根据解析阶段确定的 SqlCommandType 执行分支逻辑
+    switch (command.getType()) {
       case INSERT: {
-        // 通过 ParamNameResolver 处理args[] 数组 将用户传入的实参和指定参数名称关联起来
+        // 参数转换：利用 ParamNameResolver 将实参绑定到 SQL 占位符名称
         Object param = method.convertArgsToSqlCommandParam(args);
-        // sqlSession.insert(command.getName(), param) 调用SqlSession的insert方法
-        // rowCountResult 方法会根据 method 字段中记录的方法的返回值类型对结果进行转换
+
+        // 执行并转换结果：调用 SqlSession.insert，随后处理受影响行数
         result = rowCountResult(sqlSession.insert(command.getName(), param));
         break;
       }
@@ -78,21 +88,27 @@ public class MapperMethod {
         break;
       }
       case SELECT:
+        // 2. 【查询细分】：根据方法签名（返回类型）选择不同的查询策略
         if (method.returnsVoid() && method.hasResultHandler()) {
-          // 返回值为空 且 ResultSet通过 ResultHandler处理的方法
+          // 情况 A：无返回值 + ResultHandler，使用自定义 ResultHandler 处理流式结果
           executeWithResultHandler(sqlSession, args);
           result = null;
         } else if (method.returnsMany()) {
+          // 情况 B：返回集合或数组（selectList）
           result = executeForMany(sqlSession, args);
         } else if (method.returnsMap()) {
+          // 情况 C：返回 Map 结构（selectMap）
           result = executeForMap(sqlSession, args);
         } else if (method.returnsCursor()) {
+          // 情况 D：返回游标（针对大数据量查询）
           result = executeForCursor(sqlSession, args);
         } else {
-          // 返回值为 单一对象的方法
+          // 情况 E：返回单一对象（selectOne）
           Object param = method.convertArgsToSqlCommandParam(args);
           // 普通 select 语句的执行入口 >>
           result = sqlSession.selectOne(command.getName(), param);
+
+          // 兼容性处理：封装 Java 8 Optional
           if (method.returnsOptional()
               && (result == null || !method.getReturnType().equals(result.getClass()))) {
             result = Optional.ofNullable(result);
@@ -100,11 +116,13 @@ public class MapperMethod {
         }
         break;
       case FLUSH:
+        // 触发批量语句的刷新
         result = sqlSession.flushStatements();
         break;
       default:
         throw new BindingException("Unknown execution method for: " + command.getName());
     }
+    // 3. 【类型安全校验】：防止基本类型返回 null 导致 NPE
     if (result == null && method.getReturnType().isPrimitive() && !method.returnsVoid()) {
       throw new BindingException("Mapper method '" + command.getName()
           + " attempted to return null from a method with a primitive return type (" + method.getReturnType() + ").");
@@ -273,7 +291,7 @@ public class MapperMethod {
 
     private MappedStatement resolveMappedStatement(Class<?> mapperInterface, String methodName,
         Class<?> declaringClass, Configuration configuration) {
-      // statementId = Mapper接口全路径 + 方法名称 比如:com.gupaoedu.mapper.UserMapper
+      // statementId = Mapper接口全路径 + 方法名称 比如:com.boboedu.mapper.UserMapper
       String statementId = mapperInterface.getName() + "." + methodName;
       if (configuration.hasStatement(statementId)) {// 检查是否有该名称的SQL语句
         return configuration.getMappedStatement(statementId);

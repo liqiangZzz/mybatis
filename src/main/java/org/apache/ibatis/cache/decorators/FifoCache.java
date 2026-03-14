@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -54,7 +54,9 @@ public class FifoCache implements Cache {
 
   @Override
   public void putObject(Object key, Object value) {
+    // 这个方法实现了 缓存数据在 双端队列中的插入
     cycleKeyList(key); // 检测并清理缓存
+    // 同时在 PerpetualCache 中有数据的存储
     delegate.putObject(key, value);
   }
 
@@ -77,7 +79,7 @@ public class FifoCache implements Cache {
   private void cycleKeyList(Object key) {
     keyList.addLast(key);
     if (keyList.size() > size) {
-      // 达到上限就删除第一个数据
+      // 达到上限就删除第一个数据  保证了先进先出的 设计
       Object oldestKey = keyList.removeFirst();
       delegate.removeObject(oldestKey);
     }

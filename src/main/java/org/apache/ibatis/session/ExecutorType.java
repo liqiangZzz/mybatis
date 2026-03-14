@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -17,6 +17,10 @@ package org.apache.ibatis.session;
 
 /**
  * @author Clinton Begin
+ * Executor：执行SQL操作
+ * SIMPLE：Statement对象每次都单独使用
+ * REUSE：实现Statement对象的复用
+ * BATCH：批处理
  */
 public enum ExecutorType {
   SIMPLE, REUSE, BATCH

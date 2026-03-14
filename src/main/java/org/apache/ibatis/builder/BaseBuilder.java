@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2021 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -111,12 +111,29 @@ public abstract class BaseBuilder {
     }
   }
 
+  /**
+   * 根据别名或全类名解析并获取对应的 Class 对象。
+   *
+   * 此方法是 BaseBuilder 提供的通用工具方法，被 XMLConfigBuilder、XMLMapperBuilder 等频繁使用。
+   * 例如：在解析 <setting name="logImpl" value="STDOUT_LOGGING"/> 时，
+   * 就会调用此方法将 "STDOUT_LOGGING" 解析为 StdOutImpl.class。
+   *
+   * @param alias 别名或类的全限定名
+   * @return 对应的 Class 对象，如果 alias 为空则返回 null
+   */
   protected <T> Class<? extends T> resolveClass(String alias) {
     if (alias == null) {
       return null;
     }
     try {
-      // 根据别名获取对应的注册的类型
+
+      // 1. 核心逻辑：委派给 resolveAlias 方法处理。
+      // 根据别名获取对应的注册的类型，resolveAlias 方法内部会去 typeAliasRegistry（类型别名注册表）中进行查找。
+
+      // 解析过程通常如下：
+      // A. 先检查是否是 MyBatis 预定义的别名（如：string -> String.class, map -> HashMap.class）。
+      // B. 再检查是否是用户在 <typeAliases> 中自定义的别名。
+      // C. 如果都不是，则将 alias 视为全类名（如 com.mysql.cj.jdbc.Driver），尝试通过类加载器加载。
       return resolveAlias(alias);
     } catch (Exception e) {
       throw new BuilderException("Error resolving class. Cause: " + e, e);

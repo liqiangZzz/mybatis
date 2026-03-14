@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import java.util.Properties;
 import javax.sql.DataSource;
 
 /**
+ * DataSourceFactory 在全局配置文件加载解析到 environments 标签中的 dataSource 标签的时候会初始化
+ *                   且完成 setProperties 的处理
  * @author Clinton Begin
  */
 public interface DataSourceFactory {

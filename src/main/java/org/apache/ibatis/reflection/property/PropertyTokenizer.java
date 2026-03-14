@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -25,16 +25,22 @@ import java.util.Iterator;
 public class PropertyTokenizer implements Iterator<PropertyTokenizer> {
   private String name; // 当前表达式的名称
   private final String indexedName; // 当前表达式的索引名称
-  private String index; // 索引下标
+  private String index; // 索引下标 数组[0] 则是0 map[key] 则是key
   private final String children; // 子表达式
 
   /**
    *  例如 ：orders[0].items[0].name
+   * 解析结果：
+   * name=orders
+   * indexedName=orders[0]
+   * index=0
+   * children=item[name].name
    * @param fullname
    */
   public PropertyTokenizer(String fullname) {
     int delim = fullname.indexOf('.'); // 查找 . 的位置
     if (delim > -1) {
+      // orders[0].items[0].name
       name = fullname.substring(0, delim); // 初始化 name = orders[0]
       children = fullname.substring(delim + 1); // 初始化 children = items[0].name
     } else { // 如果不包含 .

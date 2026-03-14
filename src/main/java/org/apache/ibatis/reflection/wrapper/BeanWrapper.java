@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -27,10 +27,10 @@ import org.apache.ibatis.reflection.invoker.Invoker;
 import org.apache.ibatis.reflection.property.PropertyTokenizer;
 
 /**
+ * 主要处理Bean的属性读写
  * @author Clinton Begin
  */
-public class
-BeanWrapper extends BaseWrapper {
+public class BeanWrapper extends BaseWrapper {
 
   private final Object object;
   private final MetaClass metaClass;
@@ -43,20 +43,22 @@ BeanWrapper extends BaseWrapper {
 
   @Override
   public Object get(PropertyTokenizer prop) {
-    if (prop.getIndex() != null) {
+    if (prop.getIndex() != null) { // 属性是集合类型
+      // 从对象中解析出集合属性 通过父类 BaseWrapper 中的方法处理
       Object collection = resolveCollection(prop, object);
-      return getCollectionValue(prop, collection);
+      return getCollectionValue(prop, collection); // 获取对应的值
     } else {
+      // 获取普通属性的值
       return getBeanProperty(prop, object);
     }
   }
 
   @Override
   public void set(PropertyTokenizer prop, Object value) {
-    if (prop.getIndex() != null) {
+    if (prop.getIndex() != null) { // 属性是集合类型
       Object collection = resolveCollection(prop, object);
       setCollectionValue(prop, collection, value);
-    } else {
+    } else { // 普通类型
       setBeanProperty(prop, object, value);
     }
   }
@@ -160,8 +162,10 @@ BeanWrapper extends BaseWrapper {
 
   private Object getBeanProperty(PropertyTokenizer prop, Object object) {
     try {
+      // 获取对应的getter方法
       Invoker method = metaClass.getGetInvoker(prop.getName());
       try {
+        // 获取getter方法的返回结果
         return method.invoke(object, NO_ARGUMENTS);
       } catch (Throwable t) {
         throw ExceptionUtil.unwrapThrowable(t);

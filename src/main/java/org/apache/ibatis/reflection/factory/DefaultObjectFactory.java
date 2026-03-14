@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -55,13 +55,17 @@ public class DefaultObjectFactory implements ObjectFactory, Serializable {
 
   private  <T> T instantiateClass(Class<T> type, List<Class<?>> constructorArgTypes, List<Object> constructorArgs) {
     try {
-      Constructor<T> constructor;
+      Constructor<T> constructor; // 构造器
       if (constructorArgTypes == null || constructorArgs == null) {
+        // 获取构造器
         constructor = type.getDeclaredConstructor();
         try {
+          // 直接通过无参构造方法获取实例对象
           return constructor.newInstance();
         } catch (IllegalAccessException e) {
+          // 如果构造方法是私有的
           if (Reflector.canControlMemberAccessible()) {
+            // 放开private构造方法的访问权限
             constructor.setAccessible(true);
             return constructor.newInstance();
           } else {
@@ -69,12 +73,16 @@ public class DefaultObjectFactory implements ObjectFactory, Serializable {
           }
         }
       }
+      // 根据构造方法的参数获取对应的有参构造方法
       constructor = type.getDeclaredConstructor(constructorArgTypes.toArray(new Class[0]));
       try {
+        // 通过有参构造方法来获取对应的对象
         return constructor.newInstance(constructorArgs.toArray(new Object[0]));
       } catch (IllegalAccessException e) {
         if (Reflector.canControlMemberAccessible()) {
+          // 获取private构造方法的访问权限
           constructor.setAccessible(true);
+          // 通过有参构造方法获取对应的实力对象
           return constructor.newInstance(constructorArgs.toArray(new Object[0]));
         } else {
           throw e;

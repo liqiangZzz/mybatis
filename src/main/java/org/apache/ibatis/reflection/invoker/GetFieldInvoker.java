@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -32,10 +32,14 @@ public class GetFieldInvoker implements Invoker {
   @Override
   public Object invoke(Object target, Object[] args) throws IllegalAccessException {
     try {
+      // 返回target对象中的field属性的值
       return field.get(target);
     } catch (IllegalAccessException e) {
+      // 权限检查
       if (Reflector.canControlMemberAccessible()) {
+        // 放开访问权限
         field.setAccessible(true);
+        // 返回对应的属性的值
         return field.get(target);
       } else {
         throw e;

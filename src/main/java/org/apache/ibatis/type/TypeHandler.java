@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -26,6 +26,11 @@ import java.sql.SQLException;
 public interface TypeHandler<T> {
 
   /**
+   * 类型处理器：
+   *   JAVA类型   <------>  JDBC类型
+   *       JAVA类型 ----> JDBC类型    写
+   *       JDBC类型 ----> JAVA类型    读
+   *     SQL操作：读 写
    * 负责将Java类型转换为JDBC的类型
    *    本质上执行的就是JDBC操作中的 如下操作
    *        String sql = "SELECT id,user_name,real_name,password,age,d_id from t_user where id = ? and user_name = ?";
@@ -42,6 +47,11 @@ public interface TypeHandler<T> {
 
   /**
    * 从ResultSet中获取数据时会调用此方法，会将数据由JdbcType转换为Java类型
+   * ResultSet rs = ps.executeQuery();
+   * rs.next;
+   * rs.getString(columnName);
+   * rs.getInteger(columnIndex)
+   *
    * @param columnName Colunm name, when configuration <code>useColumnLabel</code> is <code>false</code>
    */
   T getResult(ResultSet rs, String columnName) throws SQLException;

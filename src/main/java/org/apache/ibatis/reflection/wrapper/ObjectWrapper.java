@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import org.apache.ibatis.reflection.factory.ObjectFactory;
 import org.apache.ibatis.reflection.property.PropertyTokenizer;
 
 /**
+ * 主要作用就是对一个对象进行了包裹，方便通过这个类来对对象进行属性的设置以及读取属性
+ * 然后根据被包裹对象的类型，分别使用不同的子类来进行包裹
  * @author Clinton Begin
  */
 public interface ObjectWrapper {

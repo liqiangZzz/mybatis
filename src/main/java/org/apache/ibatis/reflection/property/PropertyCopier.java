@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -38,15 +38,17 @@ public final class PropertyCopier {
   public static void copyBeanProperties(Class<?> type, Object sourceBean, Object destinationBean) {
     Class<?> parent = type;
     while (parent != null) {
+      // 获取对应类型中的所有的Field
       final Field[] fields = parent.getDeclaredFields();
-      for (Field field : fields) {
+      for (Field field : fields) { // 遍历每一个field
         try {
           try {
             // 将 destinationBean 中的属性拷贝到 sourceBean 对象中
             field.set(destinationBean, field.get(sourceBean));
           } catch (IllegalAccessException e) {
+            // 权限检查
             if (Reflector.canControlMemberAccessible()) {
-              field.setAccessible(true);
+              field.setAccessible(true); // 放开强制检查的权限
               field.set(destinationBean, field.get(sourceBean));
             } else {
               throw e;

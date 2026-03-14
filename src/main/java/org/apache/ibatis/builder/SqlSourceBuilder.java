@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -42,9 +42,9 @@ public class SqlSourceBuilder extends BaseBuilder {
   public SqlSource parse(String originalSql, Class<?> parameterType, Map<String, Object> additionalParameters) {
     // 为参数构建 ParameterMapping
     ParameterMappingTokenHandler handler = new ParameterMappingTokenHandler(configuration, parameterType, additionalParameters);
-    // 把 #参数 解析成 ？ 占位符
+    // 把 #参数 解析成 ？ 占位符 select * from t_user where id = #{id}
     GenericTokenParser parser = new GenericTokenParser("#{", "}", handler);
-    String sql = parser.parse(originalSql);
+    String sql = parser.parse(originalSql); // select * from t_user where id = ?
     return new StaticSqlSource(configuration, sql, handler.getParameterMappings());
   }
 
@@ -64,6 +64,12 @@ public class SqlSourceBuilder extends BaseBuilder {
       return parameterMappings;
     }
 
+    /**
+     * SELECT * FROM T_USER WHERE id = #{id}
+     * SELECT * FROM T_USER WHERE id = ?
+     * @param content  id
+     * @return
+     */
     @Override
     public String handleToken(String content) {
       parameterMappings.add(buildParameterMapping(content));
@@ -71,8 +77,9 @@ public class SqlSourceBuilder extends BaseBuilder {
     }
 
     private ParameterMapping buildParameterMapping(String content) {
+      // id   user.id  user.order.id
       Map<String, String> propertiesMap = parseParameterMapping(content);
-      String property = propertiesMap.get("property");
+      String property = propertiesMap.get("property"); // id
       Class<?> propertyType;
       if (metaParameters.hasGetter(property)) { // issue #448 get type from additional params
         propertyType = metaParameters.getGetterType(property);

@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -20,6 +20,9 @@ import java.util.Locale;
 import org.apache.ibatis.reflection.ReflectionException;
 
 /**
+ * 处理属性的工具类
+ *    主要用于获取getter/setter方法对应的属性名称，
+ *    校验方法名称是否是getter/setter方法，以及判断方法可以获取属性名称。
  * @author Clinton Begin
  */
 public final class PropertyNamer {
@@ -32,6 +35,7 @@ public final class PropertyNamer {
    * 将方法名称转换为属性名
    *    方法以 is get set 开头
    *       截取掉开头，然后将首字母转换为小写
+   *       getUserName  UserName -> userName
    * @param name
    * @return
    */

@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import org.apache.ibatis.reflection.ExceptionUtil;
 
 /**
+ * 数据库连接池返回给客户端的对象 Connection
  * @author Clinton Begin
  */
 class PooledConnection implements InvocationHandler {
@@ -46,6 +47,10 @@ class PooledConnection implements InvocationHandler {
 
   /**
    * Constructor for SimplePooledConnection that uses the Connection and PooledDataSource passed in.
+   *  Connection的所有方法
+   *        createStatement
+   *        preparedStatement
+   *        close
    *
    * @param connection - the connection that is to be presented as a pooled connection
    * @param dataSource - the dataSource that the connection is from
@@ -226,7 +231,9 @@ class PooledConnection implements InvocationHandler {
 
   /**
    * Required for InvocationHandler implementation.
-   *
+   *   Connection 的代理对象的代理方法
+   *       如果我们调用 Connection.close() 方法 ，并不会真正的关闭数据库连接
+   *       而是会完成连接池的管理工作
    * @param proxy  - not used
    * @param method - the method to be executed
    * @param args   - the parameters to be passed to the method

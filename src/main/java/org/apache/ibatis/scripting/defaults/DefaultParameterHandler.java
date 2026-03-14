@@ -1,5 +1,5 @@
 /**
- *    Copyright ${license.git.copyrightYears} the original author or authors.
+ *    Copyright 2009-2026 the original author or authors.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
@@ -58,16 +58,25 @@ public class DefaultParameterHandler implements ParameterHandler {
     return parameterObject;
   }
 
+  /**
+   * 会通过类型处理器完成占位符的赋值操作
+   * @param ps
+   */
   @Override
   public void setParameters(PreparedStatement ps) {
     ErrorContext.instance().activity("setting parameters").object(mappedStatement.getParameterMap().getId());
+    // 取出 SQL 中的参数映射列表  id int IntegerHandler
+    // select * from t_user where id = #{id}
+    // select * from t_user where id = ?   从哪去找答案？
     List<ParameterMapping> parameterMappings = boundSql.getParameterMappings();
     if (parameterMappings != null) {
       for (int i = 0; i < parameterMappings.size(); i++) {
         ParameterMapping parameterMapping = parameterMappings.get(i);
         if (parameterMapping.getMode() != ParameterMode.OUT) {
-          Object value;
-          String propertyName = parameterMapping.getProperty();
+          // 过滤掉存储过程中的参数
+          Object value; // 记录实参
+          String propertyName = parameterMapping.getProperty(); // 获取参数名称
+          // 获取对应的实参值
           if (boundSql.hasAdditionalParameter(propertyName)) { // issue #448 ask first for additional params
             value = boundSql.getAdditionalParameter(propertyName);
           } else if (parameterObject == null) {
@@ -78,9 +87,10 @@ public class DefaultParameterHandler implements ParameterHandler {
             MetaObject metaObject = configuration.newMetaObject(parameterObject);
             value = metaObject.getValue(propertyName);
           }
-          TypeHandler typeHandler = parameterMapping.getTypeHandler();
+          TypeHandler typeHandler = parameterMapping.getTypeHandler(); // IntegerTypeHandler
           JdbcType jdbcType = parameterMapping.getJdbcType();
           if (value == null && jdbcType == null) {
+            // 置空的处理  setNull
             jdbcType = configuration.getJdbcTypeForNull();
           }
           try {
