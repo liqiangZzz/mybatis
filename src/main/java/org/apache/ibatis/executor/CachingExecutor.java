@@ -51,16 +51,42 @@ public class CachingExecutor implements Executor {
     return delegate.getTransaction();
   }
 
+  /**
+   * [执行器关闭与缓存结算] 在会话结束时，决定暂存区数据的最终命运。
+   *
+   * 核心逻辑：
+   * 1. 若为异常关闭（强制回滚），则丢弃所有暂存的查询结果。
+   * 2. 若为正常关闭，则自动触发缓存提交，将查询结果同步至二级缓存。
+   * 3. 无论缓存处理如何，最终必须释放底层的 JDBC 连接等物理资源。
+   *
+   * @param forceRollback 是否强制回滚（通常由程序异常或手动回滚触发）
+   */
   @Override
   public void close(boolean forceRollback) {
     try {
-      //issues #499, #524 and #573
+      // 1. 【分支决策】：判断当前会话的健康状态
       if (forceRollback) {
+        /*
+         * 场景 A：强制回滚。
+         * 逻辑：调用事务缓存管理器 (TCM) 的 rollback。
+         * 结果：清空 TransactionalCache 中的暂存 Map，之前查询到的数据不会进入物理二级缓存。
+         */
         tcm.rollback();
       } else {
+
+        /*
+         * 场景 B：正常结束（对应纯查询场景下的 sqlSession.close()）。
+         * 逻辑：【核心入口】调用 tcm.commit() 执行最终结算。
+         * 结果：将暂存区的数据物理写入二级缓存，并执行可能的缓存清空标记。
+         */
         tcm.commit();
       }
     } finally {
+      /*
+       * 2. 【底层资源回收】：装饰器模式的链式调用。
+       * 逻辑：委派给内部的 delegate（通常是 BaseExecutor 及其子类）。
+       * 动作：物理关闭 JDBC 连接、清空一级缓存 (Local Cache)。
+       */
       delegate.close(forceRollback);
     }
   }

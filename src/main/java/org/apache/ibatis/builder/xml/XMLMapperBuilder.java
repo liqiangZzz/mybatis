@@ -109,8 +109,6 @@ public class XMLMapperBuilder extends BaseBuilder {
 
       // 3. 标记该资源为已加载状态
       configuration.addLoadedResource(resource);
-      // 2、把namespace（接口类型）和工厂类绑定起来，放到一个map。
-      // 一个namespace 一个 MapperProxyFactory >>
 
       // 4. 【接口绑定】： 注册 Mapper 接口，将 XML 的 namespace 与 Java Mapper 接口进行关联
       // 如果 namespace 对应的是一个真实存在的类全限定名，则将其注册到 MapperRegistry 中。
