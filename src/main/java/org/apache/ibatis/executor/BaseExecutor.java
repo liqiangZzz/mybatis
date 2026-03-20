@@ -456,7 +456,7 @@ public abstract class BaseExecutor implements Executor {
 
   /**
    * [物理查询与缓存同步] 从数据库执行查询，并将结果填充至一级缓存。
-   *
+   * <p>
    * 此方法通过“占位符机制”解决了嵌套查询（如关联映射）中的循环引用问题。
    * @param ms MappedStatement  映射语句
    * @param parameter 参数对象

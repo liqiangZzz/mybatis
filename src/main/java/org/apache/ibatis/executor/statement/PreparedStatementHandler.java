@@ -87,11 +87,30 @@ public class PreparedStatementHandler extends BaseStatementHandler {
     return resultSetHandler.handleCursorResultSets(ps);
   }
 
+  /**
+   * [物理语句实例化] 委派 JDBC 连接创建具体的 PreparedStatement 实例。
+   * <p>
+   * 此方法根据 MappedStatement 的配置（如主键生成策略、结果集类型），
+   * 选择最合适的 JDBC 构造方式。
+   */
   @Override
   protected Statement instantiateStatement(Connection connection) throws SQLException {
+    // 1. 获取经过动态解析后的最终 SQL 文本（带 ? 占位符）
     String sql = boundSql.getSql();
+
+    // 2. 【分支 A】：处理自动生成主键的场景 (基于 JDBC3 标准)
+    // 当配置了 useGeneratedKeys="true" 时触发。
     if (mappedStatement.getKeyGenerator() instanceof Jdbc3KeyGenerator) {
       String[] keyColumnNames = mappedStatement.getKeyColumns();
+
+      /*
+       * 逻辑：
+       * - 若未指定主键列名：使用 RETURN_GENERATED_KEYS 常量，要求驱动自动返回生成的主键。
+       * - 若指定了主键列名：通过列名数组要求驱动返回指定字段的值。
+       *
+       * 注意：此处调用的 connection.prepareStatement 动作会被 ConnectionLogger 拦截，
+       * 从而触发日志打印并返回一个 PreparedStatementLogger 代理对象。
+       */
       if (keyColumnNames == null) {
         // connection 是 日志的代理对象
         return connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
@@ -99,9 +118,15 @@ public class PreparedStatementHandler extends BaseStatementHandler {
         // 在执行 prepareStatement 方法的时候会进入进入到ConnectionLogger的invoker方法中
         return connection.prepareStatement(sql, keyColumnNames);
       }
+
+      // 3. 【分支 B】：处理默认结果集类型的场景 (最常见)
+      // 采用标准预编译模式，不开启主键回填。
     } else if (mappedStatement.getResultSetType() == ResultSetType.DEFAULT) {
       return connection.prepareStatement(sql);
     } else {
+
+      // 4. 【分支 C】：处理自定义结果集行为的场景
+      // 如：需要配置结果集的可滚动性 (Scrollable) 或并发控制 (ReadOnly)。
       return connection.prepareStatement(sql, mappedStatement.getResultSetType().getValue(), ResultSet.CONCUR_READ_ONLY);
     }
   }

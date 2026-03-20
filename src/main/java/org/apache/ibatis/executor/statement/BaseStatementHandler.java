@@ -105,16 +105,42 @@ public abstract class BaseStatementHandler implements StatementHandler {
     return parameterHandler;
   }
 
+  /**
+   * [语句预备] 负责 JDBC Statement 的实例化及基础属性配置。
+   * <p>
+   * 此方法遵循标准 JDBC 生命周期中的“创建与配置”阶段：
+   * 1. 记录诊断信息。
+   * 2. 物理实例化 Statement 对象。
+   * 3. 注入超时时间与抓取大小等元数据。
+   */
   @Override
   public Statement prepare(Connection connection, Integer transactionTimeout) throws SQLException {
+    // 1. 【诊断记录】：将物理 SQL 文本注入 ErrorContext（ThreadLocal）
+    // 目的：若接下来的实例化或配置过程报错，MyBatis 能准确报告出错的 SQL。
     ErrorContext.instance().sql(boundSql.getSql());
     Statement statement = null;
     try {
+      /*
+       * 2. 【具体实例化】：模板方法模式的应用。
+       * 逻辑：调用抽象方法 instantiateStatement，由具体的子类实现。
+       * - SimpleStatementHandler -> 创建普通的 java.sql.Statement
+       * - PreparedStatementHandler -> 创建 java.sql.PreparedStatement
+       *
+       * 注意：若当前 connection 是由 ConnectionLogger 产生的代理对象，
+       * 则此处返回的 statement 也会是一个带日志功能的代理对象。
+       */
       statement = instantiateStatement(connection);
+
+      // 3. 【执行元数据配置 A】：设置语句执行的超时时间
+      // 优先级：由当前事务状态与 MappedStatement 共同决定
       setStatementTimeout(statement, transactionTimeout);
+
+      // 4. 【执行元数据配置 B】：设置抓取大小 (FetchSize)
+      // 作用：优化数据库网络交互频率，避免大数据量查询时频繁触发网络 IO
       setFetchSize(statement);
       return statement;
     } catch (SQLException e) {
+      // 5. 【异常兜底】：物理释放资源，防止由于配置失败导致的 Statement 泄露
       closeStatement(statement);
       throw e;
     } catch (Exception e) {

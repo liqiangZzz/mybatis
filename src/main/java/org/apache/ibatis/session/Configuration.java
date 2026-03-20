@@ -669,7 +669,7 @@ public class Configuration {
    * 3. 完成插件逻辑的植入  装饰器模式
    * @param transaction  事务管理器
    * @param executorType 默认是 Simple
-   * @return
+   * @return 执行器对象
    */
   public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
     // 1. 确定执行策略：若未指定则使用全局默认配置，全局无配置则默认为 SIMPLE

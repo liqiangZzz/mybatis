@@ -29,8 +29,10 @@ public class PoolState {
   protected final List<PooledConnection> idleConnections = new ArrayList<>();
   // 活跃的连接
   protected final List<PooledConnection> activeConnections = new ArrayList<>();
-  protected long requestCount = 0; // 请求数据库连接的次数
-  protected long accumulatedRequestTime = 0; // 获取连接累计的时间
+  // 请求数据库连接的次数
+  protected long requestCount = 0;
+  // 获取连接累计的时间
+  protected long accumulatedRequestTime = 0;
   // CheckoutTime 表示应用从连接池中取出来，到归还连接的时长
   // accumulatedCheckoutTime 记录了所有连接累计的CheckoutTime时长
   protected long accumulatedCheckoutTime = 0;

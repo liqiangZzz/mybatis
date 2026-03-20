@@ -33,26 +33,40 @@ import javax.sql.DataSource;
 import org.apache.ibatis.io.Resources;
 
 /**
+ * [非池化数据源] 每次获取连接都直接通过 DriverManager 创建物理连接。
  * @author Clinton Begin
  * @author Eduardo Macarron
  */
 public class UnpooledDataSource implements DataSource {
 
-  private ClassLoader driverClassLoader; // 加载Driver的类加载器
-  private Properties driverProperties; // 数据库连接驱动的相关信息
-  // 缓存所有已注册的数据库连接驱动
+  // 加载 Driver 的类加载器
+  private ClassLoader driverClassLoader;
+
+  // 数据库连接驱动的相关信息
+  private Properties driverProperties;
+
+  // 缓存已注册的数据库驱动，避免重复反射加载带来的性能开销
   private static Map<String, Driver> registeredDrivers = new ConcurrentHashMap<>();
 
-  private String driver; // 驱动
-  private String url; // 数据库 url
-  private String username; // 账号
-  private String password; // 密码
+  // 驱动全类名（如 com.mysql.cj.jdbc.Driver）
+  private String driver;
+  // 数据库连接地址
+  private String url;
+  // 账号
+  private String username;
+  // 密码
+  private String password;
 
-  private Boolean autoCommit; // 是否自动提交
-  private Integer defaultTransactionIsolationLevel; // 事务隔离级别
+  // 默认自动提交状态
+  private Boolean autoCommit;
+  // 默认事务隔离级别
+  private Integer defaultTransactionIsolationLevel;
+  // 默认网络超时时间
   private Integer defaultNetworkTimeout;
 
   static {
+
+    // 【初始化阶段】：预加载当前 ClassLoader 环境下已经通过 SPI 注册的所有驱动
     // 从 DriverManager 中获取 Drivers
     Enumeration<Driver> drivers = DriverManager.getDrivers();
     while (drivers.hasMoreElements()) {
@@ -207,32 +221,47 @@ public class UnpooledDataSource implements DataSource {
 
   private Connection doGetConnection(String username, String password) throws SQLException {
     Properties props = new Properties();
+    // 将 driverProperties 中的属性复制到 props 中
     if (driverProperties != null) {
       props.putAll(driverProperties);
     }
+    // 设置用户名和密码
     if (username != null) {
       props.setProperty("user", username);
     }
     if (password != null) {
       props.setProperty("password", password);
     }
+    // 调用 doGetConnection(props) 方法，完成数据库连接的获取
     return doGetConnection(props);
   }
 
   private Connection doGetConnection(Properties properties) throws SQLException {
-    // 初始化数据库驱动
+
+    // 1.初始化数据库驱动， 确保驱动类已加载并注册到 DriverManager
     initializeDriver();
-    // 创建真正的数据库连接
+
+    // 2. 【核心动作】： 创建真正的数据库连接，调用原生 JDBC 接口，开启物理连接
+    // 这一步涉及 TCP 三次握手和数据库权限验证，是性能消耗的主要点
     Connection connection = DriverManager.getConnection(url, properties);
-    // 配置Connection的自动提交和事务隔离级别
+
+    // 3. 根据 MyBatis 配置文件中的设置，对连接进行个性化配置
+    //  配置 Connection 的自动提交和事务隔离级别
     configureConnection(connection);
     return connection;
   }
 
+  /**
+   * 初始化数据库驱动，确保驱动类已加载并注册到 DriverManager
+   * @throws SQLException
+   */
   private synchronized void initializeDriver() throws SQLException {
+
+    // 双检锁思想：若缓存中没有，则进行反射加载
     if (!registeredDrivers.containsKey(driver)) {
       Class<?> driverType;
       try {
+        // 使用 MyBatis 封装的 Resources 工具类加载类对象
         if (driverClassLoader != null) {
           driverType = Class.forName(driver, true, driverClassLoader);
         } else {
@@ -240,8 +269,17 @@ public class UnpooledDataSource implements DataSource {
         }
         // DriverManager requires the driver to be loaded via the system ClassLoader.
         // http://www.kfu.com/~nsayer/Java/dyn-jdbc.html
+
+        // 实例化驱动对象
         Driver driverInstance = (Driver)driverType.getDeclaredConstructor().newInstance();
+
+        /*
+         * 【设计模式】：代理模式 (DriverProxy)
+         * 为了统一管理和适配，将真实驱动包装在 DriverProxy 中并注册给 DriverManager。
+         */
         DriverManager.registerDriver(new DriverProxy(driverInstance));
+
+        // 存入静态缓存
         registeredDrivers.put(driver, driverInstance);
       } catch (Exception e) {
         throw new SQLException("Error setting driver on UnpooledDataSource. Cause: " + e);
@@ -249,15 +287,24 @@ public class UnpooledDataSource implements DataSource {
     }
   }
 
+  /**
+   * 根据 MyBatis 配置文件中的设置，对连接进行个性化配置
+   * 配置 Connection 的自动提交和事务隔离级别
+   * @param conn 数据库连接
+   * @throws SQLException
+   */
   private void configureConnection(Connection conn) throws SQLException {
+    // 1. 设置网络超时时间（3.5.2版本后支持）
     if (defaultNetworkTimeout != null) {
       conn.setNetworkTimeout(Executors.newSingleThreadExecutor(), defaultNetworkTimeout);
     }
-    // 配置Connection的自动提交
+
+    // 2. 设置自动提交状态
     if (autoCommit != null && autoCommit != conn.getAutoCommit()) {
       conn.setAutoCommit(autoCommit);
     }
-    // 配置Connection的事务隔离级别
+
+    // 3. 设置事务隔离级别（如 READ_COMMITTED）
     if (defaultTransactionIsolationLevel != null) {
       conn.setTransactionIsolation(defaultTransactionIsolationLevel);
     }

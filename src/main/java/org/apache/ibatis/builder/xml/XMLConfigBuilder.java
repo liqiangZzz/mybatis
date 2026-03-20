@@ -333,7 +333,7 @@ public class XMLConfigBuilder extends BaseBuilder {
 
   /**
    * 解析 <plugins> 标签，将自定义拦截器注册到 Configuration 对象中。
-   *
+   * <p>
    * MyBatis 插件通过“责任链模式”和“动态代理”实现，
    * 允许拦截 Executor、ParameterHandler、ResultSetHandler 和 StatementHandler 的核心方法。
    */

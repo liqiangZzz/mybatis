@@ -83,7 +83,7 @@ public class TypeParameterResolver {
    */
   private static Type resolveType(Type type, Type srcType, Class<?> declaringClass) {
     // 根据type的不同类型做出不同的处理
-    if (type instanceof TypeVariable) { // 解析TypeVariable类型 GenericArrayType  List<T>
+    if (type instanceof TypeVariable) { // 解析TypeVariable类型 TypeVariable  List<T>
       return resolveTypeVar((TypeVariable<?>) type, srcType, declaringClass);
     } else if (type instanceof ParameterizedType) { // 解析ParameterizedType List<String>
       return resolveParameterizedType((ParameterizedType) type, srcType, declaringClass);
