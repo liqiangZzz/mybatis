@@ -464,13 +464,40 @@ public class DefaultResultSetHandler implements ResultSetHandler {
     return rowValue;
   }
 
+  /**
+   * [自动映射判定] 确定当前结果集是否应执行“列名到属性名”的自动匹配映射。
+   * <p>
+   * 优先级逻辑：
+   * 1. 局部配置优先：检查 <resultMap> 标签上的 autoMapping 属性。
+   * 2. 全局配置兜底：参考 settings 中的 autoMappingBehavior 设置。
+   *
+   * @param resultMap 当前正在处理的 ResultMap 元数据
+   * @param isNested  标识当前是否处于嵌套映射（如 association 或 collection）内部
+   * @return true 表示开启自动映射，false 表示仅映射 XML 中显式定义的列
+   */
   private boolean shouldApplyAutomaticMappings(ResultMap resultMap, boolean isNested) {
+
+    // 1. 【局部配置检查】：如果 <resultMap> 标签显式设置了 autoMapping="true/false"
+    // 则直接以该设置作为最高准则，无视全局配置。
     if (resultMap.getAutoMapping() != null) {
       return resultMap.getAutoMapping();
-    } else {
+    }
+    // 2. 【全局配置推断】：若局部未配置，则根据当前映射的深度（是否嵌套）执行逻辑判断
+    else {
+      /*
+       * 场景 A：当前处理的是嵌套映射 (Nested)
+       * 逻辑：只有全局设置 autoMappingBehavior 为 FULL 时，才允许在嵌套映射中执行自动匹配。
+       * 目的：防止在多表关联查询时，由于列名重复导致错误的自动填充。
+       */
       if (isNested) {
         return AutoMappingBehavior.FULL == configuration.getAutoMappingBehavior();
-      } else {
+      }
+      /*
+       * 场景 B：当前处理的是主映射 (非嵌套)
+       * 逻辑：只要全局设置不为 NONE，就开启自动匹配（即支持 PARTIAL 或 FULL）。
+       * 注意：MyBatis 默认值通常是 PARTIAL。
+       */
+      else {
         return AutoMappingBehavior.NONE != configuration.getAutoMappingBehavior();
       }
     }
@@ -691,52 +718,97 @@ public class DefaultResultSetHandler implements ResultSetHandler {
       throws SQLException {
     // 最终映射的结果类型
     final Class<?> resultType = resultMap.getType();
-    // 创建MetaClass对象
+    // 创建 MetaClass 对象
     final MetaClass metaType = MetaClass.forClass(resultType, reflectorFactory);
     // 获取ResultMap中记录的<constructor>节点信息 如果不为空 则可以确定对应的构造函数
     final List<ResultMapping> constructorMappings = resultMap.getConstructorResultMappings();
-    // 创建结果对象  有4中情况
+    // 创建结果对象  有4种情况
     // 1.结果集只有一列，且存在TypeHandler对象可以将该列转换为 resultType 类型的值
     if (hasTypeHandlerForResultObject(rsw, resultType)) {
       //查找对应的TypeHandler 在使用TypeHandler 转换
       return createPrimitiveResultObject(rsw, resultMap, columnPrefix);
-    } else if (!constructorMappings.isEmpty()) {
-      // 2.RsultMap中记录的有<constructor>节点信息，通过反射方式调用构造方法，创建结果对象
+    }
+    // 2. ResultMap 中记录的有<constructor>节点信息，通过反射方式调用构造方法，创建结果对象
+    else if (!constructorMappings.isEmpty()) {
       return createParameterizedResultObject(rsw, resultType, constructorMappings, constructorArgTypes, constructorArgs, columnPrefix);
-    } else if (resultType.isInterface() || metaType.hasDefaultConstructor()) {
-      // 3.使用默认无参构造函数创建
+    }
+    // 3.使用默认无参构造函数创建
+    else if (resultType.isInterface() || metaType.hasDefaultConstructor()) {
       return objectFactory.create(resultType);
-    } else if (shouldApplyAutomaticMappings(resultMap, false)) {
-      // 4.通过自动映射的方式查找合适的构造方法并创建对象
+    }
+    // 4.通过自动映射的方式查找合适的构造方法并创建对象
+    else if (shouldApplyAutomaticMappings(resultMap, false)) {
       return createByConstructorSignature(rsw, resultType, constructorArgTypes, constructorArgs);
     }
     throw new ExecutorException("Do not know how to create an instance of " + resultType);
   }
 
+
+  /**
+   * [有参构造对象创建] 通过匹配的构造函数及参数值来实例化结果对象。
+   * <p>
+   * 此方法对应 XML 中的 <constructor> 标签映射，支持：
+   * 1. 基础列值注入构造参数。
+   * 2. 嵌套查询 (Nested Query) 结果注入。
+   * 3. 嵌套结果映射 (Nested ResultMap) 结果注入。
+   */
   Object createParameterizedResultObject(ResultSetWrapper rsw, Class<?> resultType, List<ResultMapping> constructorMappings,
                                          List<Class<?>> constructorArgTypes, List<Object> constructorArgs, String columnPrefix) {
+
+    // 标识位：记录是否至少从结果集中找到了一个非空的构造参数值
     boolean foundValues = false;
+
+    // 1. 【参数值收集】：遍历所有构造函数映射配置（<arg> 或 <idArg>）
     for (ResultMapping constructorMapping : constructorMappings) {
+
+      // 参数的 Java 类型
       final Class<?> parameterType = constructorMapping.getJavaType();
+      // 对应的数据库列名
       final String column = constructorMapping.getColumn();
       final Object value;
       try {
+
+        /*
+         * 2. 【多路径值提取】：
+         * 分支 A：处理嵌套查询。
+         * 执行另一个独立的 SELECT 语句来获取该构造参数的值。
+         */
         if (constructorMapping.getNestedQueryId() != null) {
           value = getNestedQueryConstructorValue(rsw.getResultSet(), constructorMapping, columnPrefix);
-        } else if (constructorMapping.getNestedResultMapId() != null) {
+        }
+        /*
+         * 分支 B：处理嵌套结果映射。
+         * 递归调用 getRowValue，将复杂的对象结构解析后注入构造参数。
+         */
+        else if (constructorMapping.getNestedResultMapId() != null) {
           final ResultMap resultMap = configuration.getResultMap(constructorMapping.getNestedResultMapId());
           value = getRowValue(rsw, resultMap, getColumnPrefix(columnPrefix, constructorMapping));
-        } else {
+        }
+        /*
+         * 分支 C：常规列映射（最常用）。
+         * 直接通过 TypeHandler 从当前的 ResultSet 中读取数据。
+         */
+        else {
           final TypeHandler<?> typeHandler = constructorMapping.getTypeHandler();
           value = typeHandler.getResult(rsw.getResultSet(), prependPrefix(column, columnPrefix));
         }
       } catch (ResultMapException | SQLException e) {
         throw new ExecutorException("Could not process result for mapping: " + constructorMapping, e);
       }
+
+      // 3. 【元数据暂存】：将解析出的类型和值存入列表，供最后的反射实例化使用
       constructorArgTypes.add(parameterType);
       constructorArgs.add(value);
+
+      // 更新标识位：只要有一个参数不为 null，就认为找到了有效数据
       foundValues = value != null || foundValues;
     }
+
+    /*
+     * 4. 【对象实例化】：
+     * 如果找到了有效参数值，则调用 ObjectFactory 查找匹配的构造函数并创建对象；
+     * 否则返回 null，表示当前行数据无法构成该对象。
+     */
     return foundValues ? objectFactory.create(resultType, constructorArgTypes, constructorArgs) : null;
   }
 
@@ -796,35 +868,84 @@ public class DefaultResultSetHandler implements ResultSetHandler {
     return true;
   }
 
+  /**
+   * [简单结果对象创建] 将数据库结果集中的单列值转换为 Java 简单类型对象。
+   * <p>
+   * 此方法适用于：
+   * 1. 返回类型为基本类型及其包装类。
+   * 2. 返回类型为 String、Date、BigDecimal 等简单对象。
+   */
   private Object createPrimitiveResultObject(ResultSetWrapper rsw, ResultMap resultMap, String columnPrefix) throws SQLException {
+    // 1. 获取目标 Java 类型（如 Integer.class）
     final Class<?> resultType = resultMap.getType();
     final String columnName;
+
+    /*
+     * 2. 【确定取值列名】：
+     * 分支 A：ResultMap 中定义了显式的映射关系。
+     * 逻辑：取第一个映射配置（ResultMapping）中的列名，并拼接可能存在的前缀。
+     */
     if (!resultMap.getResultMappings().isEmpty()) {
       final List<ResultMapping> resultMappingList = resultMap.getResultMappings();
       final ResultMapping mapping = resultMappingList.get(0);
       columnName = prependPrefix(mapping.getColumn(), columnPrefix);
-    } else {
+    }
+    /*
+     * 分支 B：未定义映射关系（通常是直接写 resultType="int" 的场景）。
+     * 逻辑：直接获取 JDBC 结果集（ResultSet）中的第一列列名。
+     */
+    else {
       columnName = rsw.getColumnNames().get(0);
     }
+
+    // 3. 【获取翻译官】：根据 Java 类型和列名，从注册表中获取匹配的 TypeHandler
     final TypeHandler<?> typeHandler = rsw.getTypeHandler(resultType, columnName);
+
+    // 4. 【执行取值】：调用 TypeHandler 的 getResult 方法，从 ResultSet 中读取物理数据
+    // 并完成从 JDBC 类型到 Java 类型的转换
     return typeHandler.getResult(rsw.getResultSet(), columnName);
   }
 
-  //
-  // NESTED QUERY
-  //
-
+  /**
+   * NESTED QUERY [构造函数嵌套查询处理] 为有参构造函数提取嵌套查询的返回结果。
+   * <p>
+   * 逻辑：
+   * 1. 定位嵌套查询的指令 (MappedStatement)。
+   * 2. 从当前结果集中提取数据，组装成子查询所需的入参。
+   * 3. 触发子查询并获取最终结果。
+   *
+   * @param rs                 当前正在遍历的 JDBC 结果集
+   * @param constructorMapping 构造函数参数的映射配置（包含嵌套查询 ID）
+   * @param columnPrefix       列名前缀
+   * @return 子查询执行后的结果对象，将作为构造参数传入
+   */
   private Object getNestedQueryConstructorValue(ResultSet rs, ResultMapping constructorMapping, String columnPrefix) throws SQLException {
+    // 1. 【寻址】：根据映射配置获取子查询的唯一标识符
     final String nestedQueryId = constructorMapping.getNestedQueryId();
+    // 从全局配置中获取子查询对应的 MappedStatement 对象
     final MappedStatement nestedQuery = configuration.getMappedStatement(nestedQueryId);
+    // 2. 【参数准备】：获取子查询要求的参数类型（parameterType）
     final Class<?> nestedQueryParameterType = nestedQuery.getParameterMap().getType();
+
+    // 从当前 ResultSet 记录中提取列值，将其转换为子查询所需的参数对象
+    // 例如：当前行是订单，子查询是根据 order_id 查详情，则此处提取 order_id
     final Object nestedQueryParameterObject = prepareParameterForNestedQuery(rs, constructorMapping, nestedQueryParameterType, columnPrefix);
     Object value = null;
+
+    // 3. 【分发执行】：若入参有效，启动子查询流程
     if (nestedQueryParameterObject != null) {
+      // 获取子查询的 BoundSql（处理动态标签）
       final BoundSql nestedBoundSql = nestedQuery.getBoundSql(nestedQueryParameterObject);
+      // 为子查询创建缓存键 (CacheKey)，确保能利用一级/二级缓存
       final CacheKey key = executor.createCacheKey(nestedQuery, nestedQueryParameterObject, RowBounds.DEFAULT, nestedBoundSql);
+      // 确定构造参数预期的 Java 类型
       final Class<?> targetType = constructorMapping.getJavaType();
+      /*
+       * 4. 【结果加载】：实例化结果加载器 (ResultLoader)。
+       * 此对象负责真正的执行逻辑：先查缓存，缓存未命中再查数据库。
+       */
       final ResultLoader resultLoader = new ResultLoader(configuration, executor, nestedQuery, nestedQueryParameterObject, targetType, key, nestedBoundSql);
+      // 执行查询并获取结果对象
       value = resultLoader.loadResult();
     }
     return value;
@@ -1241,10 +1362,35 @@ public class DefaultResultSetHandler implements ResultSetHandler {
     return null;
   }
 
+  /**
+   * [类型转换判定] 检查目标返回类型是否可以直接通过 TypeHandler 进行映射。
+   * <p>
+   * 此方法决定了 MyBatis 的映射策略：
+   * 1. 若返回 true：说明是简单类型映射，直接调用对应的 TypeHandler 读值。
+   * 2. 若返回 false：说明是复杂对象映射，需要进入 ResultMap 的递归属性填充逻辑。
+   *
+   * @param rsw        ResultSet 的包装类，持有当前结果集的列名、JDBC 类型等元数据
+   * @param resultType 开发者在 Mapper 中定义的期望返回类型 (如 String.class 或 User.class)
+   * @return true 表示存在匹配的处理器，可以直接转换
+   */
   private boolean hasTypeHandlerForResultObject(ResultSetWrapper rsw, Class<?> resultType) {
+
+    /*
+     * 场景 A：结果集只有一列数据。
+     * 逻辑：MyBatis 会尝试进行更精确的匹配。不仅看 Java 类型，还会结合该列在数据库中的物理类型（JdbcType）。
+     * 例子：如果结果只有一列，Java 要求返回 String，数据库是 VARCHAR，则查找 StringTypeHandler。
+     */
     if (rsw.getColumnNames().size() == 1) {
+      // 获取第一列的列名 -> 根据列名获取其 JDBC 类型 -> 从注册表中查找【Java类型 + JDBC类型】的组合处理器
       return typeHandlerRegistry.hasTypeHandler(resultType, rsw.getJdbcType(rsw.getColumnNames().get(0)));
     }
+
+    /*
+     * 场景 B：结果集有多列数据。
+     * 逻辑：此时不能绑定特定的物理列，只能根据目标 Java 类型本身来判断注册表中是否有通用的处理器。
+     * 例子：如果 Java 类型是 String.class，注册表中显然有 StringTypeHandler，返回 true。
+     *      如果 Java 类型是 User.class（自定义POJO），注册表里通常没有，返回 false。
+     */
     return typeHandlerRegistry.hasTypeHandler(resultType);
   }
 

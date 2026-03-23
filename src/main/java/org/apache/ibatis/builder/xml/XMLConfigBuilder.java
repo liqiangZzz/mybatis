@@ -418,7 +418,7 @@ public class XMLConfigBuilder extends BaseBuilder {
 
   /**
    * 解析 <reflectorFactory> 标签。
-   *
+   * <p>
    * ReflectorFactory 是 MyBatis 的反射工厂，负责创建和缓存 Reflector 对象。
    * Reflector 是 MyBatis 内部对一个 Java 类的元数据封装，包含了该类的所有属性、Getter/Setter、构造方法等信息。
    */

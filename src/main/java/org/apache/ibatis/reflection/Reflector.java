@@ -44,50 +44,72 @@ import org.apache.ibatis.reflection.property.PropertyNamer;
 /**
  * This class represents a cached set of class definition information that
  * allows for easy mapping between property names and getter/setter methods.
- *
- * 每一个Reflector对象都对应一个Java类
- * User 是一个Class对象
- *    成员变量
- *    成员方法
- *    构造方法
- *    ...
- *    User  -->Reflector
- * @author Clinton Begin
+ * [反射元数据类] 每一个 Reflector 实例对应一个唯一的 Java 类。
+ * <p>
+ * 它缓存了该类的所有反射信息，避免了在运行期重复执行高开销的反射搜索。
  */
 public class Reflector {
-  // 对应的Class 类型 1
+
+  // 当前解析的目标 Class 类型
   private final Class<?> type;
-  // 可读属性的名称集合 可读属性就是存在 getter方法的属性，初始值为null
+
+  // 所有可读属性的名称数组（即拥有 Getter 方法或公开字段的属性），初始值为null
   private final String[] readablePropertyNames;
-  // 可写属性的名称集合 可写属性就是存在 setter方法的属性，初始值为null
+
+  // 所有可写属性的名称数组（即拥有 Setter 方法或公开字段的属性），初始值为null
   private final String[] writablePropertyNames;
-  // 记录了属性相应的setter方法，key是属性名称，value是Invoker方法
-  // 他是对setter方法对应Method对象的封装
+
+  // 【核心映射 A】：属性名 -> Setter 调用器。
+  // 用于向对象属性写入值（封装了 Method 或 Field 对象）
   private final Map<String, Invoker> setMethods = new HashMap<>();
-  // 属性相应的getter方法
+
+  // 【核心映射 B】：属性名 -> Getter 调用器。
+  // 用于从对象属性读取值
   private final Map<String, Invoker> getMethods = new HashMap<>();
-  // 记录了相应setter方法的参数类型，key是属性名称 value是setter方法的参数类型
+
+  // 记录属性对应的 Java 类型（用于 Setter）。Key: 属性名, Value: 参数类型
   private final Map<String, Class<?>> setTypes = new HashMap<>();
-  // 和上面的对应
+
+  // 记录属性对应的 Java 类型（用于 Getter）。Key: 属性名, Value: 返回类型
   private final Map<String, Class<?>> getTypes = new HashMap<>();
-  // 记录了默认的构造方法
+
+  // 类的默认构造方法，用于 ObjectFactory 实例化对象
   private Constructor<?> defaultConstructor;
 
-  // 记录了所有属性名称的集合
+  // 【高性能辅助】：属性名的大写形式 -> 原始属性名。
+  // 作用：实现属性名的“大小写不敏感”匹配（如：将数据库列 USER_NAME 匹配到实体类 userName）
   private Map<String, String> caseInsensitivePropertyMap = new HashMap<>();
 
-  // 解析指定的Class类型 并填充上述的集合信息
+  /**
+   * 解析指定的 Class 类型，填充元数据集合。
+   * <p>
+   * 此过程是“重量级”的，但每个类只会执行一次。
+   */
   public Reflector(Class<?> clazz) {
-    type = clazz; // 初始化 type字段
-    addDefaultConstructor(clazz);// 设置默认的构造方法
-    addGetMethods(clazz);// 获取getter方法
-    addSetMethods(clazz); // 获取setter方法
-    addFields(clazz); // 处理没有getter/setter方法的字段 会将这些字段 添加对应的 getter/setter 方法
+    // 初始化 type字段
+    type = clazz;
+
+    // 1. 【寻找入口】：解析并记录默认构造方法
+    addDefaultConstructor(clazz);
+
+    // 2. 【解析方法】：处理所有的 Getter 方法，提取属性名并封装为 Invoker
+    addGetMethods(clazz);
+
+    // 3. 【解析方法】：处理所有的 Setter 方法，提取属性名并封装为 Invoker
+    addSetMethods(clazz);
+
+    // 4. 【补全字段】：处理没有 Getter/Setter 的公开字段，确保它们也能被访问
+    addFields(clazz);
+
+    // 5. 【元数据归档】：将 Map 中的 Key 转换为数组，方便后续遍历
+
     // 初始化 可读属性名称集合
     readablePropertyNames = getMethods.keySet().toArray(new String[0]);
     // 初始化 可写属性名称集合
     writablePropertyNames = setMethods.keySet().toArray(new String[0]);
-    // caseInsensitivePropertyMap记录了所有的可读和可写属性的名称 也就是记录了所有的属性名称
+
+    // 6. 【建立索引】：构建全大写的属性名索引，支持忽略大小写的查找逻辑
+    // caseInsensitivePropertyMap 记录了所有的可读和可写属性的名称 也就是记录了所有的属性名称
     for (String propName : readablePropertyNames) {
       // 属性名称转大写
       caseInsensitivePropertyMap.put(propName.toUpperCase(Locale.ENGLISH), propName);
