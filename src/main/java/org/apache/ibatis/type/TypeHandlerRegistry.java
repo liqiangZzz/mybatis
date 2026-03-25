@@ -54,17 +54,24 @@ import org.apache.ibatis.session.Configuration;
  */
 public final class TypeHandlerRegistry {
 
-  // 记录JdbcType和TypeHandle的对应关系
+  // 【容器 1】：存储 JDBC 类型 -> 对应TypeHandle处理器（主要用于只知道数据库类型的情况）
   private final Map<JdbcType, TypeHandler<?>>  jdbcTypeHandlerMap = new EnumMap<>(JdbcType.class);
-  // 记录Java类型向指定的JdbcType转换时需要使用到的 TypeHandle
+
+  // 【容器 2】：核心存储结构。Java 类型 -> (JDBC 类型 -> 对应处理器)
+  // 结构：Map<JavaType, Map<JdbcType, TypeHandler>>
+  // 理由：同一个 Java 类型（如 String）在不同数据库环境下可能对应不同的转换逻辑（VARCHAR 或 CLOB）
   private final Map<Type, Map<JdbcType, TypeHandler<?>>> typeHandlerMap = new ConcurrentHashMap<>();
+
+  // 用于兜底的处理器，当无法确定类型时使用
   private final TypeHandler<Object> unknownTypeHandler;
-  // 记录全部的TypeHandle类型及对应的TypeHandle对象
+
+  // 【容器 3】：存储所有已实例化的处理器对象，避免重复创建，Key 为处理器实现类的 Class
   private final Map<Class<?>, TypeHandler<?>> allTypeHandlersMap = new HashMap<>();
 
-  // 空TypeHandle的标识
+  // 空映射标记，用于性能优化
   private static final Map<JdbcType, TypeHandler<?>> NULL_TYPE_HANDLER_MAP = Collections.emptyMap();
 
+  // 默认的枚举处理器（Java Enum -> String/Int）
   private Class<? extends TypeHandler> defaultEnumTypeHandler = EnumTypeHandler.class;
 
   /**
@@ -75,6 +82,9 @@ public final class TypeHandlerRegistry {
   }
 
   /**
+   * 构造方法：在此阶段会“硬编码”注册 MyBatis 官方提供的近 40 个默认处理器。
+   * 包括：String, Integer, Date, BigDecimal, 以及最新的 Java8 时间 API 等。
+   * <p>
    * The constructor that pass the MyBatis configuration.
    *
    * @param configuration a MyBatis configuration
@@ -83,6 +93,7 @@ public final class TypeHandlerRegistry {
   public TypeHandlerRegistry(Configuration configuration) {
     this.unknownTypeHandler = new UnknownTypeHandler(configuration);
 
+    // 示例：注册 Boolean 类型的多种映射可能
     register(Boolean.class, new BooleanTypeHandler());
     register(boolean.class, new BooleanTypeHandler());
     register(JdbcType.BOOLEAN, new BooleanTypeHandler());

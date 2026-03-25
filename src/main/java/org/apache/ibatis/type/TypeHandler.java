@@ -21,43 +21,64 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 /**
+ * [类型处理器接口] 负责 Java 类型与 JDBC 类型之间的双向转换。
+ * <p>
+ * 核心职能：
+ * 1. 入参绑定：将 Java 对象的值安全地填充到 PreparedStatement 的 SQL 占位符（?）中。
+ * 2. 结果映射：将 JDBC 返回的 ResultSet 或存储过程结果转换为对应的 Java 对象。
+ *
+ * @param <T> 处理的目标 Java 类型（如 String, Integer, UserStatusEnum 等）
+ *
  * @author Clinton Begin
  */
 public interface TypeHandler<T> {
 
   /**
-   * 类型处理器：
-   *   JAVA类型   <------>  JDBC类型
-   *       JAVA类型 ----> JDBC类型    写
-   *       JDBC类型 ----> JAVA类型    读
-   *     SQL操作：读 写
-   * 负责将Java类型转换为JDBC的类型
-   *    本质上执行的就是JDBC操作中的 如下操作
-   *        String sql = "SELECT id,user_name,real_name,password,age,d_id from t_user where id = ? and user_name = ?";
-   *        ps = conn.prepareStatement(sql);
-   *        ps.setInt(1,2);
-   *        ps.setString(2,"张三");
-   * @param ps
-   * @param i 对应占位符的 位置
-   * @param parameter 占位符对应的值
-   * @param jdbcType 对应的 jdbcType 类型
-   * @throws SQLException
+   * [写操作：Java -> JDBC]
+   * 负责将 Java 类型的参数转换为数据库需要的 JDBC 类型。
+   * <p>
+   * 底层对应 JDBC 的操作：
+   * ps.setInt(index, value);
+   * ps.setString(index, value);
+   *
+   * @param ps        当前的 PreparedStatement 对象
+   * @param i         SQL 语句中对应的“?”占位符索引位置
+   * @param parameter 开发者传入的 Java 实参对象
+   * @param jdbcType  在 XML 或注解中指定的 JDBC 类型（可选）
    */
   void setParameter(PreparedStatement ps, int i, T parameter, JdbcType jdbcType) throws SQLException;
 
   /**
-   * 从ResultSet中获取数据时会调用此方法，会将数据由JdbcType转换为Java类型
-   * ResultSet rs = ps.executeQuery();
-   * rs.next;
-   * rs.getString(columnName);
-   * rs.getInteger(columnIndex)
+   * [读操作：JDBC -> Java]
+   * 从结果集中根据【列名】获取数据，并将其由 JDBC 类型转换为 Java 类型。
+   * <p>
+   * 底层对应 JDBC 的操作：
+   * String val = rs.getString("column_name");
    *
-   * @param columnName Colunm name, when configuration <code>useColumnLabel</code> is <code>false</code>
+   * @param rs         当前的 JDBC 结果集对象
+   * @param columnName 数据库中的列名（或 SQL 别名）
+   * @return 转换后的 Java 对象
    */
   T getResult(ResultSet rs, String columnName) throws SQLException;
 
+
+  /**
+   * [读操作：JDBC -> Java]
+   * 从结果集中根据【列索引】获取数据（通常用于提升访问性能或处理无名列）。
+   *
+   * @param rs          当前的 JDBC 结果集对象
+   * @param columnIndex 列的物理下标
+   */
   T getResult(ResultSet rs, int columnIndex) throws SQLException;
 
+
+  /**
+   * [读操作：JDBC -> Java]
+   * 专门用于处理【存储过程】输出参数的转换。
+   *
+   * @param cs          当前的 CallableStatement 对象
+   * @param columnIndex 输出参数的物理下标
+   */
   T getResult(CallableStatement cs, int columnIndex) throws SQLException;
 
 }
