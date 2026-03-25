@@ -31,21 +31,41 @@ import org.apache.ibatis.session.SqlSession;
 
 /**
  * Mapper 代理对象
+ * 核心功能：拦截对 Mapper 接口的方法调用，将其转化为对数据库的操作。
+ * 每一个 Mapper 接口在运行时都会由 MyBatis 创建一个对应的 MapperProxy 实例。
  * @author Clinton Begin
  * @author Eduardo Macarron
  */
 public class MapperProxy<T> implements InvocationHandler, Serializable {
 
   private static final long serialVersionUID = -4724728412955527868L;
+
+  // 用于反射处理 Java 8+ 接口默认方法（default method）的权限标识
   private static final int ALLOWED_MODES = MethodHandles.Lookup.PRIVATE | MethodHandles.Lookup.PROTECTED
       | MethodHandles.Lookup.PACKAGE | MethodHandles.Lookup.PUBLIC;
+
+  // 针对 Java 8 的构造器引用，用于处理接口默认方法
   private static final Constructor<Lookup> lookupConstructor;
+
+  // 针对 Java 9+ 的查找方法，用于处理接口默认方法
   private static final Method privateLookupInMethod;
-  private final SqlSession sqlSession; // 记录关联的 SqlSession对象
-  private final Class<T> mapperInterface; // Mapper接口对应的Class对象
-  // 用于缓存MapperMethod对象，key是Mapper接口方法对应的Method对象，value是对应的MapperMethod对象。‘
-  // MapperMethod对象会完成参数转换以及SQL语句的执行
-  // 注意：MapperMethod中并不会记录任何状态信息，可以在多线程间共享
+
+  // 【核心上下文】：当前会话实例。由于 SqlSession 非线程安全，
+  // 记录关联的 SqlSession 对象，用于执行 SQL
+  // 决定了 MapperProxy 也是会话级别的（短寿命），不能在线程间共享。
+  private final SqlSession sqlSession;
+
+  // Mapper 接口对应的 Class 对象
+  private final Class<T> mapperInterface;
+
+  /**
+   * 用于缓存 MapperMethodInvoker 对象。
+   * Key: Mapper 接口方法对应的 Method 对象
+   * MapperMethod对象会完成参数转换以及SQL语句的执行
+   * Value: 封装了执行逻辑的 Invoker 对象（可能是执行 SQL，也可能是执行接口默认方法）
+   * 作用：避免每次调用方法都重新解析，提升性能。
+   * 注意：MapperMethod中并不会记录任何状态信息，可以在多线程间共享
+   */
   private final Map<Method, MapperMethodInvoker> methodCache;
 
   public MapperProxy(SqlSession sqlSession, Class<T> mapperInterface, Map<Method, MapperMethodInvoker> methodCache) {
@@ -54,9 +74,11 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     this.methodCache = methodCache;
   }
 
+  // 静态代码块：初始化处理 Java 8/9+ 默认方法所需的反射工具
   static {
     Method privateLookupIn;
     try {
+      // 尝试获取 Java 9 引入的 MethodHandles.privateLookupIn 方法
       privateLookupIn = MethodHandles.class.getMethod("privateLookupIn", Class.class, MethodHandles.Lookup.class);
     } catch (NoSuchMethodException e) {
       privateLookupIn = null;
@@ -65,8 +87,9 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
 
     Constructor<Lookup> lookup = null;
     if (privateLookupInMethod == null) {
-      // JDK 1.8
+      // 如果是 JDK 1.8 环境
       try {
+        // 使用反射获取 MethodHandles.Lookup 的私有构造函数
         lookup = MethodHandles.Lookup.class.getDeclaredConstructor(Class.class, int.class);
         lookup.setAccessible(true);
       } catch (NoSuchMethodException e) {
@@ -119,7 +142,8 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
   private MapperMethodInvoker cachedInvoker(Method method) throws Throwable {
     try {
 
-      // 1. 【性能优化】：利用 ConcurrentHashMap 的 computeIfAbsent 实现线程安全的缓存获取。
+      // 1. 【性能优化】：使用 Java 8 的 computeIfAbsent 保证线程安全的缓存加载
+      // 利用 ConcurrentHashMap 的 computeIfAbsent 实现线程安全的缓存获取。
       // 如果 methodCache 中已存在该方法的解析结果，则直接返回；否则执行 Lambda 表达式中的解析逻辑。
       return methodCache.computeIfAbsent(method, m -> {
 
@@ -157,6 +181,7 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     }
   }
 
+  // 以下为针对不同 Java 版本获取接口默认方法执行句柄（MethodHandle）的底层实现
   private MethodHandle getMethodHandleJava9(Method method)
       throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
     final Class<?> declaringClass = method.getDeclaringClass();
@@ -171,6 +196,9 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     return lookupConstructor.newInstance(declaringClass, ALLOWED_MODES).unreflectSpecial(method, declaringClass);
   }
 
+  /**
+   * 执行器接口：定义了代理对象调用的标准逻辑
+   */
   interface MapperMethodInvoker {
     Object invoke(Object proxy, Method method, Object[] args, SqlSession sqlSession) throws Throwable;
   }
@@ -180,6 +208,8 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
    * 职责：作为中间层，负责将代理对象的调用指令转发给具体的 MapperMethod 逻辑。
    */
   private static class PlainMethodInvoker implements MapperMethodInvoker {
+
+    // 每一个方法对应一个 MapperMethod，负责解析 SQL 并执行
     private final MapperMethod mapperMethod;
 
     public PlainMethodInvoker(MapperMethod mapperMethod) {
@@ -194,6 +224,9 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
     }
   }
 
+  /**
+   * 默认方法执行器：用于执行接口中的 default 方法
+   */
   private static class DefaultMethodInvoker implements MapperMethodInvoker {
     private final MethodHandle methodHandle;
 
@@ -204,6 +237,7 @@ public class MapperProxy<T> implements InvocationHandler, Serializable {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args, SqlSession sqlSession) throws Throwable {
+      // 通过 MethodHandle 绑定到代理对象并执行该默认方法
       return methodHandle.bindTo(proxy).invokeWithArguments(args);
     }
   }
