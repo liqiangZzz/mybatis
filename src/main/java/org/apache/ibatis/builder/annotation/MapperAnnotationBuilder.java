@@ -164,7 +164,7 @@ public class MapperAnnotationBuilder {
 
   /**
    * [延迟解析重试] 尝试重新解析之前挂起的“不完整”Mapper 方法。
-   *
+   * <p>
    * 在解析注解 Mapper 时，若某个方法引用的资源（如跨命名空间的 ResultMap）尚未加载，
    * 该方法会被暂存到 Configuration 的 incompleteMethods 集合中。此方法负责循环触发重试逻辑。
    */

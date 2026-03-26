@@ -261,7 +261,7 @@ public class MapperBuilderAssistant extends BaseBuilder {
 
   /**
    * [元数据聚合与注册] 构建并向 Configuration 注册 MappedStatement 对象。
-   *
+   * <p>
    * 此方法是 CRUD 标签解析的最后一步，它将分散的属性（SQL、缓存、映射关系）聚合为单一的执行单元。
    * @param id 标签的全限定名
    * @param sqlSource SQL 语句源码

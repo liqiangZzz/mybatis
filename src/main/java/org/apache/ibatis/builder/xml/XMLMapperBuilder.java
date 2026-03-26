@@ -92,7 +92,7 @@ public class XMLMapperBuilder extends BaseBuilder {
 
   /**
    * 解析 Mapper 映射文件（Mapper.xml）的核心入口。
-   *
+   * <p>
    * 总体职能分为三部分：
    * 1. 静态元数据解析（SQL 语句、结果集映射等）。
    * 2. 接口与 XML 的动态绑定。

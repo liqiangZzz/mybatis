@@ -61,7 +61,7 @@ public class XMLStatementBuilder extends BaseBuilder {
    * 第三步：处理主键生成策略，mybatis 默认使用的是 NoKeyGenerator，如果设置了 useGeneratedKeys 会使用 Jdbc3KeyGenerator
    * 第四步：mybatis到了这一步，会将sql处理成为sqlSource存储起来并且替换类似#{}这样的特殊字符，
    *  SqlSource是mybatis中比较重要的一个部分，所以这一步sql处理会比较复杂。
-   *
+   * <p>
    * <!ELEMENT select (#PCDATA | include | trim | where | set | foreach | choose | if | bind)*>
    * <!ATTLIST select
    * id CDATA #REQUIRED
